@@ -125,6 +125,87 @@ class DownloadQueueTests(unittest.TestCase):
 
         self.assertEqual(max_active, 1)
 
+    def test_start_failure_clears_reserved_worker_slot(self):
+        class FailingThread:
+            def __init__(self, target, daemon):
+                self._target = target
+                self.daemon = daemon
+
+            def start(self):
+                raise RuntimeError("thread failed to start")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = DownloadQueue(models_dir=Path(tmp), pull_func=lambda *args, **kwargs: None)
+            queue.add("first")
+
+            with mock.patch.object(queue_module.threading, "Thread", FailingThread):
+                with self.assertRaisesRegex(RuntimeError, "thread failed to start"):
+                    queue.start()
+
+            self.assertFalse(queue.snapshot()["running"])
+            self.assertTrue(queue.wait_until_idle(0.1))
+
+    def test_add_and_start_during_worker_shutdown_gap_is_not_lost(self):
+        calls = []
+        shutdown_gap_open = threading.Event()
+        release_shutdown = threading.Event()
+
+        def fake_pull(model, **kwargs):
+            calls.append(model)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = DownloadQueue(models_dir=Path(tmp), pull_func=fake_pull)
+            original_condition = queue._condition
+            original_next_waiting_item = queue._next_waiting_item
+
+            class PausingCondition:
+                def __init__(self, condition):
+                    self._condition = condition
+                    self.pause_on_worker_exit = False
+                    self.worker_thread = None
+
+                def __enter__(self):
+                    return self._condition.__enter__()
+
+                def __exit__(self, exc_type, exc_value, traceback):
+                    result = self._condition.__exit__(exc_type, exc_value, traceback)
+                    if (
+                        self.pause_on_worker_exit
+                        and threading.current_thread() is self.worker_thread
+                    ):
+                        self.pause_on_worker_exit = False
+                        shutdown_gap_open.set()
+                        release_shutdown.wait(2)
+                    return result
+
+                def notify_all(self):
+                    self._condition.notify_all()
+
+                def wait(self, timeout=None):
+                    return self._condition.wait(timeout)
+
+            pausing_condition = PausingCondition(original_condition)
+
+            def next_waiting_item_with_shutdown_pause():
+                item = original_next_waiting_item()
+                if item is None:
+                    pausing_condition.pause_on_worker_exit = True
+                    pausing_condition.worker_thread = threading.current_thread()
+                return item
+
+            queue._condition = pausing_condition
+            queue._next_waiting_item = next_waiting_item_with_shutdown_pause
+            queue.add("first")
+
+            queue.start()
+            self.assertTrue(shutdown_gap_open.wait(2))
+            queue.add("second")
+            queue.start()
+            release_shutdown.set()
+            self.assertTrue(queue.wait_until_idle(2))
+
+        self.assertEqual(calls, ["first", "second"])
+
     def test_failure_marks_item_failed_and_retry_resets_to_waiting(self):
         attempts = []
 

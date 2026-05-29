@@ -56,7 +56,14 @@ class DownloadQueue:
             self._pause_requested = False
             worker = threading.Thread(target=self._run_worker, daemon=True)
             self._worker = worker
-        worker.start()
+        try:
+            worker.start()
+        except Exception:
+            with self._condition:
+                if self._worker is worker:
+                    self._worker = None
+                self._condition.notify_all()
+            raise
 
     def pause_after_current(self) -> None:
         with self._condition:
@@ -120,9 +127,11 @@ class DownloadQueue:
             while True:
                 with self._condition:
                     if self._pause_requested:
+                        self._clear_worker_locked()
                         return
                     item = self._next_waiting_item()
                     if item is None:
+                        self._clear_worker_locked()
                         return
                     item["status"] = "running"
                     item["updated_at"] = time.time()
