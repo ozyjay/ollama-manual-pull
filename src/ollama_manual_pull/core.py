@@ -17,6 +17,7 @@ from typing import Any
 
 DEFAULT_REGISTRY = "https://registry.ollama.ai"
 DEFAULT_HOST = "registry.ollama.ai"
+ProgressCallback = Any
 
 
 @dataclasses.dataclass(frozen=True)
@@ -81,6 +82,11 @@ def verify_file(path: Path, digest: str) -> bool:
     return hasher.hexdigest() == expected
 
 
+def emit_progress(progress: ProgressCallback | None, event: dict[str, Any]) -> None:
+    if progress is not None:
+        progress(event)
+
+
 def fetch_json(url: str, retries: int) -> dict[str, Any]:
     last_error: Exception | None = None
     for attempt in range(retries + 1):
@@ -113,6 +119,7 @@ def download_blob(
     digest: str,
     retries: int,
     dry_run: bool,
+    progress: ProgressCallback | None = None,
 ) -> None:
     final = paths.blobs / digest_filename(digest)
     temp = final.with_name(final.name + ".manual-download")
@@ -120,10 +127,27 @@ def download_blob(
 
     if verify_file(final, digest):
         print(f"OK already present: {final.name}", flush=True)
+        emit_progress(
+            progress,
+            {
+                "type": "blob-complete",
+                "digest": digest,
+                "path": str(final),
+                "reused": True,
+            },
+        )
         return
 
     if dry_run:
         print(f"Would download: {url}", flush=True)
+        emit_progress(
+            progress,
+            {
+                "type": "blob-dry-run",
+                "digest": digest,
+                "url": url,
+            },
+        )
         return
 
     paths.blobs.mkdir(parents=True, exist_ok=True)
@@ -136,12 +160,30 @@ def download_blob(
                 request.add_header("Range", f"bytes={resume_at}-")
 
             print(f"Downloading: {final.name}", flush=True)
+            emit_progress(
+                progress,
+                {
+                    "type": "blob-start",
+                    "digest": digest,
+                    "url": url,
+                    "resume_at": resume_at,
+                },
+            )
             with urllib.request.urlopen(request, timeout=60) as response, temp.open(mode) as file:
                 shutil.copyfileobj(response, file, length=1024 * 1024)
 
             if verify_file(temp, digest):
                 temp.replace(final)
                 print(f"Verified: {final.name}", flush=True)
+                emit_progress(
+                    progress,
+                    {
+                        "type": "blob-complete",
+                        "digest": digest,
+                        "path": str(final),
+                        "reused": False,
+                    },
+                )
                 return
 
             raise RuntimeError(f"Checksum mismatch for {final.name}")
@@ -149,6 +191,15 @@ def download_blob(
             if attempt >= retries:
                 raise RuntimeError(f"Failed to download {digest}: {error}") from error
             print(f"Retrying {final.name}: {error}", file=sys.stderr, flush=True)
+            emit_progress(
+                progress,
+                {
+                    "type": "blob-retry",
+                    "digest": digest,
+                    "error": str(error),
+                    "attempt": attempt + 1,
+                },
+            )
             time.sleep(min(2**attempt, 10))
 
 
@@ -159,6 +210,7 @@ def pull_model(
     registry: str,
     retries: int,
     dry_run: bool,
+    progress: ProgressCallback | None = None,
 ) -> None:
     ref = parse_model_ref(model)
     host = urllib.parse.urlparse(registry).netloc or DEFAULT_HOST
@@ -166,6 +218,14 @@ def pull_model(
     manifest_url = f"{registry.rstrip('/')}/v2/{ref.namespace}/{ref.name}/manifests/{ref.tag}"
 
     print(f"Fetching manifest: {manifest_url}", flush=True)
+    emit_progress(
+        progress,
+        {
+            "type": "manifest-fetch",
+            "model": model,
+            "url": manifest_url,
+        },
+    )
     manifest = fetch_json(manifest_url, retries=retries)
 
     for digest in manifest_digests(manifest):
@@ -176,6 +236,7 @@ def pull_model(
             digest=digest,
             retries=retries,
             dry_run=dry_run,
+            progress=progress,
         )
 
     if dry_run:
@@ -183,6 +244,14 @@ def pull_model(
         return
 
     install_manifest(paths, manifest)
+    emit_progress(
+        progress,
+        {
+            "type": "model-complete",
+            "model": model,
+            "manifest": str(paths.manifest),
+        },
+    )
     print(flush=True)
     print(f"Registered {model} with Ollama.", flush=True)
     print("Check with: ollama list", flush=True)
