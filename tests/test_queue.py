@@ -3,7 +3,9 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
+import ollama_manual_pull.queue as queue_module
 from ollama_manual_pull.queue import DownloadQueue
 
 
@@ -58,6 +60,70 @@ class DownloadQueueTests(unittest.TestCase):
         self.assertIn("blob-start", snapshot["items"][0]["messages"])
         self.assertEqual(first["status"], "waiting")
         self.assertEqual(second["status"], "waiting")
+
+    def test_concurrent_start_calls_reserve_single_worker_slot(self):
+        active = 0
+        max_active = 0
+        lock = threading.Lock()
+        first_started = threading.Event()
+        release_downloads = threading.Event()
+
+        def fake_pull(model, **kwargs):
+            nonlocal active, max_active
+            with lock:
+                active += 1
+                max_active = max(max_active, active)
+            first_started.set()
+            release_downloads.wait(2)
+            with lock:
+                active -= 1
+
+        original_thread = queue_module.threading.Thread
+        original_current_thread = queue_module.threading.current_thread
+        wrappers_by_thread = {}
+
+        class SlowVisibleThread:
+            def __init__(self, target, daemon):
+                self._target = target
+                self._visible = threading.Event()
+                self._thread = original_thread(target=self._run, daemon=daemon)
+                wrappers_by_thread[self._thread] = self
+
+            def start(self):
+                self._thread.start()
+
+            def is_alive(self):
+                return self._visible.is_set() and self._thread.is_alive()
+
+            def _run(self):
+                time.sleep(0.05)
+                self._visible.set()
+                self._target()
+
+        def fake_current_thread():
+            current = original_current_thread()
+            return wrappers_by_thread.get(current, current)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = DownloadQueue(models_dir=Path(tmp), pull_func=fake_pull)
+            queue.add("first")
+            queue.add("second")
+
+            with (
+                mock.patch.object(queue_module.threading, "Thread", SlowVisibleThread),
+                mock.patch.object(queue_module.threading, "current_thread", fake_current_thread),
+            ):
+                starters = [original_thread(target=queue.start) for _ in range(8)]
+                for starter in starters:
+                    starter.start()
+                for starter in starters:
+                    starter.join()
+
+                self.assertTrue(first_started.wait(2))
+                release_downloads.set()
+                self.assertTrue(queue.wait_until_idle(2))
+
+        self.assertEqual(max_active, 1)
 
     def test_failure_marks_item_failed_and_retry_resets_to_waiting(self):
         attempts = []

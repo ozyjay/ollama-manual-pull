@@ -51,7 +51,7 @@ class DownloadQueue:
 
     def start(self) -> None:
         with self._condition:
-            if self._worker is not None and self._worker.is_alive():
+            if self._worker is not None:
                 return
             self._pause_requested = False
             worker = threading.Thread(target=self._run_worker, daemon=True)
@@ -90,7 +90,8 @@ class DownloadQueue:
     def snapshot(self) -> dict[str, Any]:
         with self._condition:
             return {
-                "running": any(item["status"] == "running" for item in self._items),
+                "running": self._worker is not None
+                or any(item["status"] == "running" for item in self._items),
                 "pause_requested": self._pause_requested,
                 "models_dir": str(self.models_dir),
                 "registry": self.registry,
@@ -102,9 +103,9 @@ class DownloadQueue:
         deadline = None if timeout is None else time.monotonic() + timeout
         with self._condition:
             while True:
-                worker_alive = self._worker is not None and self._worker.is_alive()
+                worker_reserved = self._worker is not None
                 running_item = any(item["status"] == "running" for item in self._items)
-                if not worker_alive and not running_item:
+                if not worker_reserved and not running_item:
                     return True
                 if deadline is None:
                     remaining = None
@@ -119,11 +120,9 @@ class DownloadQueue:
             while True:
                 with self._condition:
                     if self._pause_requested:
-                        self._clear_worker_locked()
                         return
                     item = self._next_waiting_item()
                     if item is None:
-                        self._clear_worker_locked()
                         return
                     item["status"] = "running"
                     item["updated_at"] = time.time()
