@@ -74,7 +74,7 @@ class _SearchResultParser(HTMLParser):
         if name is None or name in self.seen_names:
             return
 
-        self.current = {"name": name, "title": None, "description": None, "tags": []}
+        self.current = {"name": name, "heading": None, "description": None, "tags": []}
         self.anchor_depth = 1
 
     def handle_data(self, data: str) -> None:
@@ -88,8 +88,8 @@ class _SearchResultParser(HTMLParser):
         if tag == self.capture_tag:
             text = " ".join("".join(self.capture_parts).split())
             if text:
-                if tag in {"h1", "h2"} and self.current["title"] is None:
-                    self.current["title"] = text
+                if tag in {"h1", "h2"} and self.current["heading"] is None:
+                    self.current["heading"] = text
                 elif tag == "p" and self.current["description"] is None:
                     self.current["description"] = text
                 elif tag == "span":

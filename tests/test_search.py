@@ -24,7 +24,8 @@ class SearchTests(unittest.TestCase):
         results = parse_search_results(SAMPLE_HTML)
 
         self.assertEqual(results[0]["name"], "qwen3-coder")
-        self.assertEqual(results[0]["title"], "qwen3-coder")
+        self.assertEqual(results[0]["heading"], "qwen3-coder")
+        self.assertNotIn("title", results[0])
         self.assertEqual(results[0]["description"], "Qwen coding model")
         self.assertIn("30b", results[0]["tags"])
         self.assertIn("tools", results[0]["tags"])
@@ -49,7 +50,8 @@ class SearchTests(unittest.TestCase):
 
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["name"], "foo")
-        self.assertEqual(results[0]["title"], "foo")
+        self.assertEqual(results[0]["heading"], "foo")
+        self.assertNotIn("title", results[0])
         self.assertEqual(results[0]["description"], "desc")
 
     def test_search_models_returns_empty_success_for_empty_query(self):
