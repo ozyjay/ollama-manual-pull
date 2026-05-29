@@ -49,6 +49,13 @@ class OllamaManualPullTests(unittest.TestCase):
             self.assertTrue(omp.verify_file(file_path, digest))
             self.assertFalse(omp.verify_file(file_path, "sha256:" + "0" * 64))
 
+    def test_contiguous_prefix_size_for_normal_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            file_path = Path(tmp) / "blob"
+            file_path.write_bytes(b"model bytes")
+
+            self.assertEqual(omp.contiguous_prefix_size(file_path), len(b"model bytes"))
+
     def test_install_manifest_writes_ollama_manifest_json(self):
         manifest = {
             "schemaVersion": 2,
@@ -120,6 +127,43 @@ class OllamaManualPullTests(unittest.TestCase):
                 )
 
             self.assertEqual(requests[0].get_header("Range"), "bytes=3-")
+            self.assertTrue((paths.blobs / omp.digest_filename(digest)).exists())
+
+    def test_resume_from_uses_matching_external_partial_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = omp.model_paths(Path(tmp), omp.parse_model_ref("qwen3-coder:30b"))
+            paths.blobs.mkdir(parents=True)
+            digest = "sha256:" + hashlib.sha256(b"abcdef").hexdigest()
+            external = paths.blobs / (omp.digest_filename(digest) + "-partial")
+            external.write_bytes(b"abc")
+            requests = []
+
+            class FakeResponse(io.BytesIO):
+                headers = {"Content-Length": "3"}
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, traceback):
+                    self.close()
+
+            def fake_urlopen(request, timeout):
+                requests.append(request)
+                return FakeResponse(b"def")
+
+            with mock.patch.object(core.urllib.request, "urlopen", side_effect=fake_urlopen):
+                omp.download_blob(
+                    registry="https://registry.ollama.ai",
+                    ref=omp.parse_model_ref("qwen3-coder:30b"),
+                    paths=paths,
+                    digest=digest,
+                    retries=0,
+                    dry_run=False,
+                    resume_from=external,
+                )
+
+            self.assertEqual(requests[0].get_header("Range"), "bytes=3-")
+            self.assertFalse(external.exists())
             self.assertTrue((paths.blobs / omp.digest_filename(digest)).exists())
 
 

@@ -40,6 +40,7 @@ Resuming at: 16.7GB
 ollama-manual-pull --dry-run qwen3-coder:30b
 ollama-manual-pull --models-dir /path/to/models qwen3-coder:30b
 ollama-manual-pull --registry https://registry.ollama.ai qwen3-coder:30b
+ollama-manual-pull --resume-from ~/.ollama/models/blobs/sha256-...-partial qwen3-coder:30b
 ```
 
 By default, models are written to `$OLLAMA_MODELS` when set, otherwise `~/.ollama/models`.
@@ -48,6 +49,7 @@ By default, models are written to `$OLLAMA_MODELS` when set, otherwise `~/.ollam
 
 - Existing verified blobs are reused.
 - Downloads resume from `.manual-download` temp files.
+- `--resume-from` can point at a specific partial blob file when you know which file should be continued.
 - Every blob is verified by SHA-256 before being registered.
 - The manifest is written only after all referenced blobs verify.
 

@@ -81,6 +81,23 @@ def verify_file(path: Path, digest: str) -> bool:
     return hasher.hexdigest() == expected
 
 
+def contiguous_prefix_size(path: Path) -> int:
+    size = path.stat().st_size
+    if size == 0:
+        return 0
+    try:
+        fd = os.open(path, os.O_RDONLY)
+        try:
+            first_data = os.lseek(fd, 0, os.SEEK_DATA)
+            if first_data != 0:
+                return 0
+            return os.lseek(fd, 0, os.SEEK_HOLE)
+        finally:
+            os.close(fd)
+    except OSError:
+        return size
+
+
 def format_size(num_bytes: int | float) -> str:
     units = ["B", "KB", "MB", "GB", "TB"]
     size = float(num_bytes)
@@ -149,9 +166,13 @@ def download_blob(
     digest: str,
     retries: int,
     dry_run: bool,
+    resume_from: Path | None = None,
 ) -> None:
     final = paths.blobs / digest_filename(digest)
-    temp = final.with_name(final.name + ".manual-download")
+    if resume_from and digest.split(":", 1)[1] in resume_from.name:
+        temp = resume_from
+    else:
+        temp = final.with_name(final.name + ".manual-download")
     url = f"{registry.rstrip('/')}/v2/{ref.namespace}/{ref.name}/blobs/{digest}"
 
     if verify_file(final, digest):
@@ -166,6 +187,12 @@ def download_blob(
     for attempt in range(retries + 1):
         try:
             resume_at = temp.stat().st_size if temp.exists() else 0
+            prefix_size = contiguous_prefix_size(temp) if temp.exists() else 0
+            if resume_at != prefix_size:
+                raise RuntimeError(
+                    f"{temp} is sparse or non-contiguous; only {format_size(prefix_size)} "
+                    f"is usable as a simple resume prefix"
+                )
             request = urllib.request.Request(url)
             mode = "ab" if resume_at else "wb"
             if resume_at:
@@ -226,6 +253,7 @@ def pull_model(
     registry: str,
     retries: int,
     dry_run: bool,
+    resume_from: Path | None = None,
 ) -> None:
     ref = parse_model_ref(model)
     host = urllib.parse.urlparse(registry).netloc or DEFAULT_HOST
@@ -243,6 +271,7 @@ def pull_model(
             digest=digest,
             retries=retries,
             dry_run=dry_run,
+            resume_from=resume_from,
         )
 
     if dry_run:
@@ -268,6 +297,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--registry", default=DEFAULT_REGISTRY)
     parser.add_argument("--retries", type=int, default=12)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--resume-from",
+        type=Path,
+        help="Use a specific partial blob file if its filename contains the blob digest.",
+    )
     return parser
 
 
@@ -281,6 +315,7 @@ def main(argv: list[str] | None = None) -> int:
             registry=args.registry,
             retries=args.retries,
             dry_run=args.dry_run,
+            resume_from=args.resume_from.expanduser() if args.resume_from else None,
         )
     except Exception as error:
         print(f"Error: {error}", file=sys.stderr, flush=True)
