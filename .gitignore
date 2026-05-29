@@ -9,3 +9,4 @@ dist/
 build/
 *.manual-download
 .superpowers/
+.worktrees/
