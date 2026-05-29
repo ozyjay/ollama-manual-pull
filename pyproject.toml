@@ -19,6 +19,7 @@ classifiers = [
 
 [project.scripts]
 ollama-manual-pull = "ollama_manual_pull:main"
+ollama-manual-pull-web = "ollama_manual_pull:run_web"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
