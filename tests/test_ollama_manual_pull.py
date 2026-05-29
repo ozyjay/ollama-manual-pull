@@ -1,10 +1,13 @@
 import hashlib
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import ollama_manual_pull as omp
+import ollama_manual_pull.core as core
 
 
 class OllamaManualPullTests(unittest.TestCase):
@@ -60,6 +63,39 @@ class OllamaManualPullTests(unittest.TestCase):
 
             self.assertTrue(paths.manifest.exists())
             self.assertEqual(json.loads(paths.manifest.read_text()), manifest)
+
+    def test_download_blob_resumes_from_existing_partial_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = omp.model_paths(Path(tmp), omp.parse_model_ref("qwen3-coder:30b"))
+            paths.blobs.mkdir(parents=True)
+            digest = "sha256:" + hashlib.sha256(b"abcdef").hexdigest()
+            temp = paths.blobs / (omp.digest_filename(digest) + ".manual-download")
+            temp.write_bytes(b"abc")
+            requests = []
+
+            class FakeResponse(io.BytesIO):
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, traceback):
+                    self.close()
+
+            def fake_urlopen(request, timeout):
+                requests.append(request)
+                return FakeResponse(b"def")
+
+            with mock.patch.object(core.urllib.request, "urlopen", side_effect=fake_urlopen):
+                omp.download_blob(
+                    registry="https://registry.ollama.ai",
+                    ref=omp.parse_model_ref("qwen3-coder:30b"),
+                    paths=paths,
+                    digest=digest,
+                    retries=0,
+                    dry_run=False,
+                )
+
+            self.assertEqual(requests[0].get_header("Range"), "bytes=3-")
+            self.assertTrue((paths.blobs / omp.digest_filename(digest)).exists())
 
 
 if __name__ == "__main__":
