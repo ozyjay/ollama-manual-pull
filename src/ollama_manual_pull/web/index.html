@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ollama Manual Pull</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="app">
+    <section class="workspace">
+      <header class="topbar">
+        <div class="title-block">
+          <h1>Ollama Manual Pull</h1>
+          <p>One active download. Queue the rest.</p>
+        </div>
+        <div id="target" class="target" aria-live="polite"></div>
+      </header>
+
+      <div id="app-error" class="alert" role="status" aria-live="polite" hidden></div>
+
+      <section class="search-panel" aria-labelledby="search-heading">
+        <div class="section-title" id="search-heading">Find or add model</div>
+        <form id="search-form" class="search-form">
+          <input id="model-input" name="model" autocomplete="off" spellcheck="false" placeholder="Search models or paste a ref, e.g. qwen3-coder:30b">
+          <button type="submit">Search</button>
+          <button id="add-direct" type="button">Add</button>
+        </form>
+        <div id="search-status" class="muted search-status" aria-live="polite"></div>
+        <div id="search-results" class="results"></div>
+      </section>
+
+      <section aria-labelledby="active-heading">
+        <div class="section-title" id="active-heading">Active download</div>
+        <div id="active" class="active-card"></div>
+      </section>
+
+      <section aria-labelledby="queue-heading">
+        <div class="section-title" id="queue-heading">Queue</div>
+        <div id="queue" class="queue-list"></div>
+      </section>
+
+      <footer class="actions">
+        <button id="start" type="button">Start</button>
+        <button id="pause" type="button">Pause after current</button>
+      </footer>
+    </section>
+
+    <aside class="details" aria-labelledby="details-heading">
+      <h2 id="details-heading">Details</h2>
+      <div id="details"></div>
+    </aside>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

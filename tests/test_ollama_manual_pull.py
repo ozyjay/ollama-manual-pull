@@ -204,6 +204,110 @@ class OllamaManualPullTests(unittest.TestCase):
             self.assertFalse(default_restart.exists())
             self.assertEqual(requests[0].get_header("Range"), "bytes=3-")
 
+    def test_download_blob_reports_complete_event_for_existing_verified_blob(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ref = omp.parse_model_ref("qwen3-coder:30b")
+            paths = omp.model_paths(Path(tmp), ref)
+            paths.blobs.mkdir(parents=True)
+            digest = "sha256:" + hashlib.sha256(b"model bytes").hexdigest()
+            final = paths.blobs / omp.digest_filename(digest)
+            final.write_bytes(b"model bytes")
+            events = []
+
+            omp.download_blob(
+                registry=omp.DEFAULT_REGISTRY,
+                ref=ref,
+                paths=paths,
+                digest=digest,
+                retries=0,
+                dry_run=False,
+                progress=events.append,
+            )
+
+            self.assertEqual(
+                events,
+                [
+                    {
+                        "type": "blob-complete",
+                        "digest": digest,
+                        "path": str(final),
+                        "reused": True,
+                    }
+                ],
+            )
+
+    def test_download_blob_wraps_progress_callback_error_for_existing_verified_blob(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ref = omp.parse_model_ref("qwen3-coder:30b")
+            paths = omp.model_paths(Path(tmp), ref)
+            paths.blobs.mkdir(parents=True)
+            digest = "sha256:" + hashlib.sha256(b"model bytes").hexdigest()
+            final = paths.blobs / omp.digest_filename(digest)
+            final.write_bytes(b"model bytes")
+            attempts = []
+
+            def failing_progress(event):
+                attempts.append(event)
+                raise RuntimeError("callback exploded")
+
+            with self.assertRaises(omp.core.ProgressCallbackError) as raised:
+                omp.download_blob(
+                    registry=omp.DEFAULT_REGISTRY,
+                    ref=ref,
+                    paths=paths,
+                    digest=digest,
+                    retries=2,
+                    dry_run=False,
+                    progress=failing_progress,
+                )
+
+            self.assertIsInstance(raised.exception.__cause__, RuntimeError)
+            self.assertEqual(len(attempts), 1)
+            self.assertEqual(attempts[0]["type"], "blob-complete")
+
+    def test_pull_model_reports_manifest_fetch_before_fetching_manifest(self):
+        manifest_url_seen = []
+        events = []
+        original_fetch_json = omp.core.fetch_json
+
+        def fake_fetch_json(url, retries):
+            manifest_url_seen.append(url)
+            self.assertEqual(
+                events,
+                [
+                    {
+                        "type": "manifest-fetch",
+                        "model": "qwen3-coder:30b",
+                        "url": url,
+                    }
+                ],
+            )
+            return {
+                "schemaVersion": 2,
+                "config": {"digest": "sha256:" + "a" * 64, "size": 3},
+                "layers": [],
+            }
+
+        try:
+            omp.core.fetch_json = fake_fetch_json
+            with tempfile.TemporaryDirectory() as tmp:
+                omp.pull_model(
+                    "qwen3-coder:30b",
+                    models_dir=Path(tmp),
+                    registry=omp.DEFAULT_REGISTRY,
+                    retries=0,
+                    dry_run=True,
+                    progress=events.append,
+                )
+        finally:
+            omp.core.fetch_json = original_fetch_json
+
+        self.assertEqual(
+            manifest_url_seen,
+            [
+                "https://registry.ollama.ai/v2/library/qwen3-coder/manifests/30b",
+            ],
+        )
 
 if __name__ == "__main__":
     unittest.main()

@@ -45,6 +45,16 @@ ollama-manual-pull --resume-from ~/.ollama/models/blobs/sha256-...-partial qwen3
 
 By default, models are written to `$OLLAMA_MODELS` when set, otherwise `~/.ollama/models`.
 
+## Web UI
+
+Launch the local browser UI:
+
+```bash
+ollama-manual-pull-web
+```
+
+The web UI runs on `127.0.0.1`, queues one model download at a time, and preserves the same safety behavior as the CLI downloader. Search is best effort; direct model references such as `qwen3-coder:30b` always remain supported.
+
 ## Safety
 
 - Existing verified blobs are reused.
@@ -58,5 +68,6 @@ By default, models are written to `$OLLAMA_MODELS` when set, otherwise `~/.ollam
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
-python3 -m py_compile src/ollama_manual_pull/*.py tests/test_ollama_manual_pull.py
+python3 -m py_compile src/ollama_manual_pull/*.py tests/*.py
+node --check src/ollama_manual_pull/web/app.js
 ```

@@ -20,6 +20,7 @@ from .core import (
     pull_model,
     verify_file,
 )
+from .server import run_web
 
 __all__ = [
     "DEFAULT_HOST",
@@ -39,5 +40,6 @@ __all__ = [
     "model_paths",
     "parse_model_ref",
     "pull_model",
+    "run_web",
     "verify_file",
 ]
