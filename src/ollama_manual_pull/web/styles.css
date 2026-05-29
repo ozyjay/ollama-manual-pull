@@ -275,7 +275,7 @@ h2 {
   display: inline-flex;
   max-width: 100%;
   align-items: center;
-  border-radius: 999px;
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 750;
   line-height: 1.2;
