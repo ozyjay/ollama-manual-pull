@@ -1,0 +1,39 @@
+"""Manual Ollama model downloader."""
+
+from .core import (
+    DEFAULT_HOST,
+    DEFAULT_REGISTRY,
+    ModelPaths,
+    ModelRef,
+    build_parser,
+    default_models_dir,
+    digest_filename,
+    download_blob,
+    fetch_json,
+    install_manifest,
+    main,
+    manifest_digests,
+    model_paths,
+    parse_model_ref,
+    pull_model,
+    verify_file,
+)
+
+__all__ = [
+    "DEFAULT_HOST",
+    "DEFAULT_REGISTRY",
+    "ModelPaths",
+    "ModelRef",
+    "build_parser",
+    "default_models_dir",
+    "digest_filename",
+    "download_blob",
+    "fetch_json",
+    "install_manifest",
+    "main",
+    "manifest_digests",
+    "model_paths",
+    "parse_model_ref",
+    "pull_model",
+    "verify_file",
+]
