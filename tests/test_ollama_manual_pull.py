@@ -93,6 +93,35 @@ class OllamaManualPullTests(unittest.TestCase):
                 ],
             )
 
+    def test_download_blob_wraps_progress_callback_error_for_existing_verified_blob(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ref = omp.parse_model_ref("qwen3-coder:30b")
+            paths = omp.model_paths(Path(tmp), ref)
+            paths.blobs.mkdir(parents=True)
+            digest = "sha256:" + hashlib.sha256(b"model bytes").hexdigest()
+            final = paths.blobs / omp.digest_filename(digest)
+            final.write_bytes(b"model bytes")
+            attempts = []
+
+            def failing_progress(event):
+                attempts.append(event)
+                raise RuntimeError("callback exploded")
+
+            with self.assertRaises(omp.core.ProgressCallbackError) as raised:
+                omp.download_blob(
+                    registry=omp.DEFAULT_REGISTRY,
+                    ref=ref,
+                    paths=paths,
+                    digest=digest,
+                    retries=2,
+                    dry_run=False,
+                    progress=failing_progress,
+                )
+
+            self.assertIsInstance(raised.exception.__cause__, RuntimeError)
+            self.assertEqual(len(attempts), 1)
+            self.assertEqual(attempts[0]["type"], "blob-complete")
+
     def test_pull_model_reports_manifest_fetch_before_fetching_manifest(self):
         manifest_url_seen = []
         events = []

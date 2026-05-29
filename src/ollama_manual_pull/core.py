@@ -12,12 +12,16 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 DEFAULT_REGISTRY = "https://registry.ollama.ai"
 DEFAULT_HOST = "registry.ollama.ai"
-ProgressCallback = Any
+ProgressCallback = Callable[[dict[str, Any]], None]
+
+
+class ProgressCallbackError(Exception):
+    pass
 
 
 @dataclasses.dataclass(frozen=True)
@@ -84,7 +88,10 @@ def verify_file(path: Path, digest: str) -> bool:
 
 def emit_progress(progress: ProgressCallback | None, event: dict[str, Any]) -> None:
     if progress is not None:
-        progress(event)
+        try:
+            progress(event)
+        except Exception as error:
+            raise ProgressCallbackError("Progress callback failed") from error
 
 
 def fetch_json(url: str, retries: int) -> dict[str, Any]:
