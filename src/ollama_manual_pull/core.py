@@ -81,6 +81,42 @@ def verify_file(path: Path, digest: str) -> bool:
     return hasher.hexdigest() == expected
 
 
+def format_size(num_bytes: int | float) -> str:
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(num_bytes)
+    for unit in units:
+        if abs(size) < 1000 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(size)}B"
+            return f"{size:.1f}{unit}"
+        size /= 1000
+    return f"{size:.1f}TB"
+
+
+def format_duration(seconds: int | float) -> str:
+    seconds = max(0, int(seconds))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours}h{minutes:02d}m{secs:02d}s"
+    return f"{minutes}m{secs:02d}s"
+
+
+def format_progress(
+    *,
+    downloaded: int,
+    total: int | None,
+    bytes_per_second: float,
+) -> str:
+    speed = f"{format_size(bytes_per_second)}/s"
+    if total and total > 0:
+        percent = downloaded / total * 100
+        remaining = max(total - downloaded, 0)
+        eta = format_duration(remaining / bytes_per_second) if bytes_per_second > 0 else "--"
+        return f"{percent:5.1f}% {format_size(downloaded)}/{format_size(total)} {speed} eta {eta}"
+    return f"{format_size(downloaded)} {speed}"
+
+
 def fetch_json(url: str, retries: int) -> dict[str, Any]:
     last_error: Exception | None = None
     for attempt in range(retries + 1):
@@ -136,8 +172,39 @@ def download_blob(
                 request.add_header("Range", f"bytes={resume_at}-")
 
             print(f"Downloading: {final.name}", flush=True)
+            if resume_at:
+                print(f"Resuming at: {format_size(resume_at)}", flush=True)
             with urllib.request.urlopen(request, timeout=60) as response, temp.open(mode) as file:
-                shutil.copyfileobj(response, file, length=1024 * 1024)
+                total = response.headers.get("Content-Length")
+                total_bytes = int(total) + resume_at if total and total.isdigit() else None
+                downloaded = resume_at
+                started = time.monotonic()
+                last_printed = 0.0
+
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    file.write(chunk)
+                    downloaded += len(chunk)
+                    now = time.monotonic()
+                    if now - last_printed >= 0.5:
+                        elapsed = max(now - started, 0.001)
+                        line = format_progress(
+                            downloaded=downloaded,
+                            total=total_bytes,
+                            bytes_per_second=(downloaded - resume_at) / elapsed,
+                        )
+                        print(f"\r{line}", end="", flush=True)
+                        last_printed = now
+
+                elapsed = max(time.monotonic() - started, 0.001)
+                line = format_progress(
+                    downloaded=downloaded,
+                    total=total_bytes,
+                    bytes_per_second=(downloaded - resume_at) / elapsed,
+                )
+                print(f"\r{line}", flush=True)
 
             if verify_file(temp, digest):
                 temp.replace(final)

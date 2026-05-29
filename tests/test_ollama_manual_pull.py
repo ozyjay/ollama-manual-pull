@@ -64,6 +64,29 @@ class OllamaManualPullTests(unittest.TestCase):
             self.assertTrue(paths.manifest.exists())
             self.assertEqual(json.loads(paths.manifest.read_text()), manifest)
 
+    def test_format_progress_shows_percent_size_speed_and_eta(self):
+        line = omp.format_progress(
+            downloaded=1_500_000_000,
+            total=3_000_000_000,
+            bytes_per_second=5_000_000,
+        )
+
+        self.assertIn("50.0%", line)
+        self.assertIn("1.5GB/3.0GB", line)
+        self.assertIn("5.0MB/s", line)
+        self.assertIn("eta 5m00s", line)
+
+    def test_format_progress_handles_unknown_total(self):
+        line = omp.format_progress(
+            downloaded=1_500_000,
+            total=None,
+            bytes_per_second=500_000,
+        )
+
+        self.assertIn("1.5MB", line)
+        self.assertIn("500.0KB/s", line)
+        self.assertNotIn("eta", line)
+
     def test_download_blob_resumes_from_existing_partial_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             paths = omp.model_paths(Path(tmp), omp.parse_model_ref("qwen3-coder:30b"))
@@ -74,6 +97,8 @@ class OllamaManualPullTests(unittest.TestCase):
             requests = []
 
             class FakeResponse(io.BytesIO):
+                headers = {"Content-Length": "3"}
+
                 def __enter__(self):
                     return self
 

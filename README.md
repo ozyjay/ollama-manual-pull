@@ -26,6 +26,14 @@ ollama list
 ollama run qwen3-coder:30b
 ```
 
+During large blob downloads, the tool prints resumable progress with percent, downloaded size, total size, transfer speed, and ETA:
+
+```text
+Downloading: sha256-1194192cf2a187eb02722edcc3f77b11d21f537048ce04b67ccf8ba78863006a
+Resuming at: 16.7GB
+ 96.0% 17.8GB/18.6GB 4.8MB/s eta 2m04s
+```
+
 ## Options
 
 ```bash
