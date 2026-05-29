@@ -7,6 +7,16 @@ from urllib.request import urlopen
 
 
 SEARCH_URL = "https://ollama.com/search"
+SITE_PATHS = {
+    "about",
+    "blog",
+    "download",
+    "library",
+    "pricing",
+    "search",
+    "signin",
+    "signup",
+}
 VOID_TAGS = {
     "area",
     "base",
@@ -54,16 +64,16 @@ class _SearchResultParser(HTMLParser):
         self.seen_names: set[str] = set()
         self.current: dict[str, Any] | None = None
         self.anchor_depth = 0
-        self.capture_tag: str | None = None
-        self.capture_parts: list[str] = []
+        self.capture_stack: list[dict[str, Any]] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if self.current is not None:
             if tag not in VOID_TAGS:
                 self.anchor_depth += 1
-            if tag in {"h1", "h2", "p", "span"}:
-                self.capture_tag = tag
-                self.capture_parts = []
+            if tag in {"h1", "h2", "p"} or (
+                tag == "span" and not self.capture_stack
+            ):
+                self.capture_stack.append({"tag": tag, "parts": []})
             return
 
         if tag != "a":
@@ -87,15 +97,16 @@ class _SearchResultParser(HTMLParser):
         self.handle_endtag(tag)
 
     def handle_data(self, data: str) -> None:
-        if self.capture_tag is not None:
-            self.capture_parts.append(data)
+        for capture in self.capture_stack:
+            capture["parts"].append(data)
 
     def handle_endtag(self, tag: str) -> None:
         if self.current is None:
             return
 
-        if tag == self.capture_tag:
-            text = " ".join("".join(self.capture_parts).split())
+        if self.capture_stack and tag == self.capture_stack[-1]["tag"]:
+            capture = self.capture_stack.pop()
+            text = " ".join("".join(capture["parts"]).split())
             if text:
                 if tag in {"h1", "h2"} and self.current["heading"] is None:
                     self.current["heading"] = text
@@ -103,8 +114,6 @@ class _SearchResultParser(HTMLParser):
                     self.current["description"] = text
                 elif tag == "span":
                     self.current["tags"].append(text)
-            self.capture_tag = None
-            self.capture_parts = []
 
         self.anchor_depth -= 1
         if self.anchor_depth <= 0:
@@ -112,17 +121,25 @@ class _SearchResultParser(HTMLParser):
             self.results.append(self.current)
             self.current = None
             self.anchor_depth = 0
+            self.capture_stack = []
 
 
 def _model_name_from_href(href: str | None) -> str | None:
-    if href is None or not href.startswith("/library/"):
+    if href is None or not href.startswith("/"):
         return None
 
-    model_name = href.removeprefix("/library/").split("?", 1)[0].split("#", 1)[0]
-    model_name = model_name.strip("/").split("/", 1)[0]
-    if not model_name:
+    path = href.split("?", 1)[0].split("#", 1)[0].strip("/")
+    parts = [unquote(part) for part in path.split("/") if part]
+    if len(parts) == 2 and parts[0] == "library":
+        return parts[1]
+
+    if len(parts) != 2:
         return None
-    return unquote(model_name)
+
+    namespace, model_name = parts
+    if namespace.lower() in SITE_PATHS:
+        return None
+    return f"{namespace}/{model_name}"
 
 
 def parse_search_results(page: str) -> list[dict[str, Any]]:

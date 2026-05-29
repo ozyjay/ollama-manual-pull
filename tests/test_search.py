@@ -43,6 +43,29 @@ class SearchTests(unittest.TestCase):
 
         self.assertEqual([result["name"] for result in results], ["qwen3-coder"])
 
+    def test_parse_search_results_accepts_namespaced_model_links(self):
+        results = parse_search_results(
+            '<a href="/QwertyMcQwertz/MutualistLLM">'
+            "<h2>MutualistLLM</h2><p>Community model</p></a>"
+        )
+
+        self.assertEqual(results[0]["name"], "QwertyMcQwertz/MutualistLLM")
+        self.assertEqual(results[0]["heading"], "MutualistLLM")
+        self.assertEqual(results[0]["description"], "Community model")
+
+    def test_parse_search_results_keeps_nested_inline_heading_and_description_text(self):
+        results = parse_search_results(
+            '<a href="/library/foo">'
+            "<h2>foo <span>bar</span></h2>"
+            "<p>Alpha <span>Beta</span> Gamma</p>"
+            "</a>"
+        )
+
+        self.assertEqual(results[0]["heading"], "foo bar")
+        self.assertEqual(results[0]["description"], "Alpha Beta Gamma")
+        self.assertNotIn("bar", results[0]["tags"])
+        self.assertNotIn("Beta", results[0]["tags"])
+
     def test_parse_search_results_handles_void_elements_inside_anchor(self):
         results = parse_search_results(
             '<a href="/library/foo"><img src="x"><h2>foo</h2><br><p>desc</p></a>'
