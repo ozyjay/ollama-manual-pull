@@ -105,6 +105,39 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(traversal_status, 404)
         self.assertEqual(missing_status, 404)
 
+    def test_run_web_expands_models_dir(self):
+        created = []
+
+        class FakeServer:
+            server_address = ("127.0.0.1", 12345)
+
+            def serve_forever(self):
+                raise KeyboardInterrupt
+
+            def server_close(self):
+                pass
+
+        def fake_create_server(address, *, models_dir, registry, retries):
+            created.append(models_dir)
+            return FakeServer()
+
+        with mock.patch.object(server_module, "create_server", side_effect=fake_create_server):
+            with mock.patch.object(server_module.webbrowser, "open"):
+                result = server_module.run_web(["--models-dir", "~/ollama-test-models"])
+
+        self.assertEqual(result, 0)
+        self.assertEqual(created, [Path("~/ollama-test-models").expanduser()])
+
+    def test_package_data_includes_web_assets(self):
+        project_root = Path(__file__).resolve().parents[1]
+        pyproject = project_root / "pyproject.toml"
+        content = pyproject.read_text()
+
+        self.assertIn("[tool.setuptools.package-data]", content)
+        self.assertIn('ollama_manual_pull = ["web/*"]', content)
+        for asset in ["index.html", "styles.css", "app.js"]:
+            self.assertTrue((project_root / "src" / "ollama_manual_pull" / "web" / asset).is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

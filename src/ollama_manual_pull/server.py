@@ -155,7 +155,7 @@ def run_web(argv: list[str] | None = None) -> int:
 
     httpd = create_server(
         ("127.0.0.1", 0),
-        models_dir=args.models_dir,
+        models_dir=args.models_dir.expanduser(),
         registry=args.registry,
         retries=args.retries,
     )

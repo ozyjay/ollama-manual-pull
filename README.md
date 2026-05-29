@@ -57,5 +57,6 @@ The web UI runs on `127.0.0.1`, queues one model download at a time, and preserv
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
-python3 -m py_compile src/ollama_manual_pull/*.py tests/test_ollama_manual_pull.py
+python3 -m py_compile src/ollama_manual_pull/*.py tests/*.py
+node --check src/ollama_manual_pull/web/app.js
 ```
