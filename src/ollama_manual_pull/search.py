@@ -77,6 +77,15 @@ class _SearchResultParser(HTMLParser):
         self.current = {"name": name, "heading": None, "description": None, "tags": []}
         self.anchor_depth = 1
 
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in VOID_TAGS:
+            if self.current is None:
+                self.handle_starttag(tag, attrs)
+            return
+
+        self.handle_starttag(tag, attrs)
+        self.handle_endtag(tag)
+
     def handle_data(self, data: str) -> None:
         if self.capture_tag is not None:
             self.capture_parts.append(data)

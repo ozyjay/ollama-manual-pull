@@ -54,6 +54,16 @@ class SearchTests(unittest.TestCase):
         self.assertNotIn("title", results[0])
         self.assertEqual(results[0]["description"], "desc")
 
+    def test_parse_search_results_handles_self_closing_void_elements_inside_anchor(self):
+        results = parse_search_results(
+            '<a href="/library/foo"><img src="x"/><h2>foo</h2><br/><p>desc</p></a>'
+        )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["name"], "foo")
+        self.assertEqual(results[0]["heading"], "foo")
+        self.assertEqual(results[0]["description"], "desc")
+
     def test_search_models_returns_empty_success_for_empty_query(self):
         payload = search_models("  ")
 
