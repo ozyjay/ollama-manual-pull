@@ -166,6 +166,44 @@ class OllamaManualPullTests(unittest.TestCase):
             self.assertFalse(external.exists())
             self.assertTrue((paths.blobs / omp.digest_filename(digest)).exists())
 
+    def test_resume_from_deletes_smaller_default_restart_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = omp.model_paths(Path(tmp), omp.parse_model_ref("qwen3-coder:30b"))
+            paths.blobs.mkdir(parents=True)
+            digest = "sha256:" + hashlib.sha256(b"abcdef").hexdigest()
+            default_restart = paths.blobs / (omp.digest_filename(digest) + ".manual-download")
+            external = paths.blobs / (omp.digest_filename(digest) + ".older-download")
+            default_restart.write_bytes(b"a")
+            external.write_bytes(b"abc")
+            requests = []
+
+            class FakeResponse(io.BytesIO):
+                headers = {"Content-Length": "3"}
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, traceback):
+                    self.close()
+
+            def fake_urlopen(request, timeout):
+                requests.append(request)
+                return FakeResponse(b"def")
+
+            with mock.patch.object(core.urllib.request, "urlopen", side_effect=fake_urlopen):
+                omp.download_blob(
+                    registry="https://registry.ollama.ai",
+                    ref=omp.parse_model_ref("qwen3-coder:30b"),
+                    paths=paths,
+                    digest=digest,
+                    retries=0,
+                    dry_run=False,
+                    resume_from=external,
+                )
+
+            self.assertFalse(default_restart.exists())
+            self.assertEqual(requests[0].get_header("Range"), "bytes=3-")
+
 
 if __name__ == "__main__":
     unittest.main()

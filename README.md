@@ -50,6 +50,7 @@ By default, models are written to `$OLLAMA_MODELS` when set, otherwise `~/.ollam
 - Existing verified blobs are reused.
 - Downloads resume from `.manual-download` temp files.
 - `--resume-from` can point at a specific partial blob file when you know which file should be continued.
+- When `--resume-from` points to a larger clean partial, a smaller default `.manual-download` restart file is removed automatically.
 - Every blob is verified by SHA-256 before being registered.
 - The manifest is written only after all referenced blobs verify.
 

@@ -169,10 +169,11 @@ def download_blob(
     resume_from: Path | None = None,
 ) -> None:
     final = paths.blobs / digest_filename(digest)
+    default_temp = final.with_name(final.name + ".manual-download")
     if resume_from and digest.split(":", 1)[1] in resume_from.name:
         temp = resume_from
     else:
-        temp = final.with_name(final.name + ".manual-download")
+        temp = default_temp
     url = f"{registry.rstrip('/')}/v2/{ref.namespace}/{ref.name}/blobs/{digest}"
 
     if verify_file(final, digest):
@@ -184,6 +185,16 @@ def download_blob(
         return
 
     paths.blobs.mkdir(parents=True, exist_ok=True)
+    if temp != default_temp and default_temp.exists() and temp.exists():
+        default_size = default_temp.stat().st_size
+        resume_size = temp.stat().st_size
+        if default_size < resume_size and default_size == contiguous_prefix_size(default_temp):
+            print(
+                f"Removing smaller restart temp: {default_temp.name} ({format_size(default_size)})",
+                flush=True,
+            )
+            default_temp.unlink()
+
     for attempt in range(retries + 1):
         try:
             resume_at = temp.stat().st_size if temp.exists() else 0
