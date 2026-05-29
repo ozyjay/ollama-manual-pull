@@ -8,3 +8,4 @@ venv/
 dist/
 build/
 *.manual-download
+.superpowers/
