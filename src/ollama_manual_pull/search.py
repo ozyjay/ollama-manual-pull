@@ -7,6 +7,22 @@ from urllib.request import urlopen
 
 
 SEARCH_URL = "https://ollama.com/search"
+VOID_TAGS = {
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr",
+}
 
 
 class _TextExtractor(HTMLParser):
@@ -43,7 +59,8 @@ class _SearchResultParser(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if self.current is not None:
-            self.anchor_depth += 1
+            if tag not in VOID_TAGS:
+                self.anchor_depth += 1
             if tag in {"h1", "h2", "p", "span"}:
                 self.capture_tag = tag
                 self.capture_parts = []
@@ -112,7 +129,8 @@ def search_models(query: str) -> dict[str, Any]:
 
     try:
         page = fetch_search_html(query)
+        results = parse_search_results(page)
     except Exception as error:
         return {"available": False, "results": [], "error": str(error)}
 
-    return {"available": True, "results": parse_search_results(page), "error": None}
+    return {"available": True, "results": results, "error": None}

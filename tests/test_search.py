@@ -1,7 +1,7 @@
 import unittest
 from unittest import mock
 
-from ollama_manual_pull.search import parse_search_results, search_models
+from ollama_manual_pull.search import fetch_search_html, parse_search_results, search_models
 
 
 SAMPLE_HTML = """
@@ -42,6 +42,16 @@ class SearchTests(unittest.TestCase):
 
         self.assertEqual([result["name"] for result in results], ["qwen3-coder"])
 
+    def test_parse_search_results_handles_void_elements_inside_anchor(self):
+        results = parse_search_results(
+            '<a href="/library/foo"><img src="x"><h2>foo</h2><br><p>desc</p></a>'
+        )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["name"], "foo")
+        self.assertEqual(results[0]["title"], "foo")
+        self.assertEqual(results[0]["description"], "desc")
+
     def test_search_models_returns_empty_success_for_empty_query(self):
         payload = search_models("  ")
 
@@ -56,6 +66,32 @@ class SearchTests(unittest.TestCase):
         self.assertFalse(payload["available"])
         self.assertEqual(payload["results"], [])
         self.assertIn("offline", payload["error"])
+
+    def test_search_models_returns_unavailable_on_parse_failure(self):
+        with (
+            mock.patch("ollama_manual_pull.search.fetch_search_html", return_value="<html>"),
+            mock.patch(
+                "ollama_manual_pull.search.parse_search_results",
+                side_effect=ValueError("parse failed"),
+            ),
+        ):
+            payload = search_models("qwen")
+
+        self.assertFalse(payload["available"])
+        self.assertEqual(payload["results"], [])
+        self.assertIn("parse failed", payload["error"])
+
+    def test_fetch_search_html_url_encodes_query(self):
+        response = mock.Mock()
+        response.read.return_value = b"search page"
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=None)
+
+        with mock.patch("ollama_manual_pull.search.urlopen", return_value=response) as urlopen:
+            page = fetch_search_html("qwen coder")
+
+        self.assertEqual(page, "search page")
+        urlopen.assert_called_once_with("https://ollama.com/search?q=qwen+coder", timeout=15)
 
 
 if __name__ == "__main__":
