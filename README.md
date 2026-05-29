@@ -36,6 +36,16 @@ ollama-manual-pull --registry https://registry.ollama.ai qwen3-coder:30b
 
 By default, models are written to `$OLLAMA_MODELS` when set, otherwise `~/.ollama/models`.
 
+## Web UI
+
+Launch the local browser UI:
+
+```bash
+ollama-manual-pull-web
+```
+
+The web UI runs on `127.0.0.1`, queues one model download at a time, and preserves the same safety behavior as the CLI downloader. Search is best effort; direct model references such as `qwen3-coder:30b` always remain supported.
+
 ## Safety
 
 - Existing verified blobs are reused.
