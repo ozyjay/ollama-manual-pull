@@ -7,12 +7,14 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import zlib
 from pathlib import Path
 
 
 APP_NAME = "Ollama Manual Pull"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+NATIVE_APP_TEMPLATE = PROJECT_ROOT / "scripts" / "macos_native_app.swift"
 
 
 def build_app(
@@ -36,7 +38,7 @@ def build_app(
 
     _write_app_icon(resources)
     _write_info_plist(contents / "Info.plist")
-    native_source = resources / "NativeApp.m"
+    native_source = resources / "NativeApp.swift"
     _write_native_source(native_source, python_executable)
     _compile_native_app(native_source, macos / APP_NAME)
     return app_path
@@ -258,175 +260,33 @@ def _over(bottom: tuple[int, int, int, int], top: tuple[int, int, int, int]) -> 
 
 
 def _write_native_source(path: Path, python_executable: Path) -> None:
-    source = '''#import <Cocoa/Cocoa.h>
-#import <WebKit/WebKit.h>
-
-static NSString *BundledPython = %%PYTHON_EXECUTABLE%%;
-
-@interface AppDelegate : NSObject <NSApplicationDelegate>
-@property (strong) NSWindow *window;
-@property (strong) WKWebView *webView;
-@property (strong) NSTask *serverTask;
-@property (strong) NSMutableString *serverOutputBuffer;
-@end
-
-@implementation AppDelegate
-
-- (void)applicationDidFinishLaunching:(NSNotification *)notification {
-    [self createWindow];
-    [self startServer];
-}
-
-- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
-    return YES;
-}
-
-- (void)applicationWillTerminate:(NSNotification *)notification {
-    if ([self.serverTask.standardOutput isKindOfClass:[NSPipe class]]) {
-        NSPipe *output = (NSPipe *)self.serverTask.standardOutput;
-        output.fileHandleForReading.readabilityHandler = nil;
-    }
-    [self.serverTask terminate];
-}
-
-- (void)createWindow {
-    self.webView = [[WKWebView alloc] initWithFrame:NSZeroRect configuration:[WKWebViewConfiguration new]];
-    self.window = [[NSWindow alloc]
-        initWithContentRect:NSMakeRect(0, 0, 1180, 780)
-        styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable)
-        backing:NSBackingStoreBuffered
-        defer:NO];
-    self.window.title = @"Ollama Manual Pull";
-    self.window.contentView = self.webView;
-    [self.window center];
-    [self.window makeKeyAndOrderFront:nil];
-}
-
-- (void)startServer {
-    NSURL *resourcesURL = [[NSBundle mainBundle] resourceURL];
-    NSString *python = [self resolvedPython];
-    NSTask *task = [NSTask new];
-    NSPipe *output = [NSPipe pipe];
-    self.serverOutputBuffer = [NSMutableString string];
-    task.executableURL = [NSURL fileURLWithPath:python];
-    task.arguments = @[
-        @"-c",
-        @"from ollama_manual_pull.server import create_server; from ollama_manual_pull.core import default_models_dir; httpd = create_server(('127.0.0.1', 0), models_dir=default_models_dir()); host, port = httpd.server_address; print(f'URL=http://{host}:{port}/', flush=True); httpd.serve_forever()"
-    ];
-    task.environment = @{
-        @"PYTHONPATH": [[resourcesURL URLByAppendingPathComponent:@"src"] path],
-        @"PATH": @"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-    };
-    task.standardOutput = output;
-    output.fileHandleForReading.readabilityHandler = ^(NSFileHandle *handle) {
-        NSData *data = [handle availableData];
-        if (data.length == 0) {
-            return;
-        }
-        NSString *chunk = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-        if (chunk == nil) {
-            return;
-        }
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self appendServerOutput:chunk];
-        });
-    };
-
-    NSError *error = nil;
-    if (![task launchAndReturnError:&error]) {
-        [self showError:[NSString stringWithFormat:@"Could not start the local app server: %@", error.localizedDescription]];
-        return;
-    }
-    self.serverTask = task;
-}
-
-- (void)appendServerOutput:(NSString *)chunk {
-    [self.serverOutputBuffer appendString:chunk];
-    NSRange prefix = [self.serverOutputBuffer rangeOfString:@"URL="];
-    if (prefix.location == NSNotFound) {
-        return;
-    }
-
-    NSUInteger start = NSMaxRange(prefix);
-    NSCharacterSet *newlines = [NSCharacterSet newlineCharacterSet];
-    NSRange searchRange = NSMakeRange(start, self.serverOutputBuffer.length - start);
-    NSRange end = [self.serverOutputBuffer rangeOfCharacterFromSet:newlines options:0 range:searchRange];
-    if (end.location == NSNotFound) {
-        return;
-    }
-
-    NSString *urlString = [self.serverOutputBuffer substringWithRange:NSMakeRange(start, end.location - start)];
-    NSURL *url = [NSURL URLWithString:urlString];
-    if (url != nil) {
-        [self.webView loadRequest:[NSURLRequest requestWithURL:url]];
-    }
-}
-
-- (NSString *)resolvedPython {
-    NSFileManager *manager = [NSFileManager defaultManager];
-    if ([manager isExecutableFileAtPath:BundledPython]) {
-        return BundledPython;
-    }
-    NSString *home = NSHomeDirectory();
-    NSArray<NSString *> *candidates = @[
-        [home stringByAppendingPathComponent:@".pyenv/shims/python3"],
-        @"/opt/homebrew/bin/python3",
-        @"/usr/local/bin/python3",
-        @"/usr/bin/python3"
-    ];
-    for (NSString *candidate in candidates) {
-        if ([manager isExecutableFileAtPath:candidate]) {
-            return candidate;
-        }
-    }
-    return @"/usr/bin/python3";
-}
-
-- (void)showError:(NSString *)message {
-    NSAlert *alert = [NSAlert new];
-    alert.messageText = @"Ollama Manual Pull";
-    alert.informativeText = message;
-    alert.alertStyle = NSAlertStyleCritical;
-    [alert runModal];
-}
-
-@end
-
-int main(int argc, const char * argv[]) {
-    @autoreleasepool {
-        NSApplication *app = [NSApplication sharedApplication];
-        AppDelegate *delegate = [AppDelegate new];
-        app.delegate = delegate;
-        [app setActivationPolicy:NSApplicationActivationPolicyRegular];
-        [app activateIgnoringOtherApps:YES];
-        [app run];
-    }
-    return 0;
-}
-'''
-    source = source.replace("%%PYTHON_EXECUTABLE%%", _objc_string_literal(python_executable))
+    source = NATIVE_APP_TEMPLATE.read_text()
+    source = source.replace("%%PYTHON_EXECUTABLE%%", _swift_string_literal(python_executable))
     path.write_text(source)
 
 
-def _objc_string_literal(value: Path) -> str:
-    return "@" + json.dumps(str(value))
+def _swift_string_literal(value: Path) -> str:
+    return json.dumps(str(value))
 
 
 def _compile_native_app(source: Path, executable: Path) -> None:
-    subprocess.run(
-        [
-            "clang",
-            str(source),
-            "-o",
-            str(executable),
-            "-fobjc-arc",
-            "-framework",
-            "Cocoa",
-            "-framework",
-            "WebKit",
-        ],
-        check=True,
-    )
+    with tempfile.TemporaryDirectory(prefix="ollama-manual-pull-swift-cache-") as module_cache:
+        subprocess.run(
+            [
+                "swiftc",
+                str(source),
+                "-o",
+                str(executable),
+                "-parse-as-library",
+                "-module-cache-path",
+                module_cache,
+                "-framework",
+                "AppKit",
+                "-framework",
+                "SwiftUI",
+            ],
+            check=True,
+        )
 
 
 def main(argv: list[str] | None = None) -> int:

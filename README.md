@@ -71,7 +71,7 @@ python3 scripts/build_macos_app.py --install
 open "/Applications/Ollama Manual Pull.app"
 ```
 
-The app opens its own macOS window using WebKit and starts the local Python server in the background. It does not open a separate browser tab. The builder bakes in the Python interpreter used to run the build command, which works well with `pyenv` because Finder-launched apps do not inherit your shell setup. If that interpreter is unavailable later, the app falls back to common `pyenv`, Homebrew, and system `python3` paths.
+The app opens its own native macOS window and starts the local Python server in the background. It does not open a separate browser tab or embed the browser UI. The builder bakes in the Python interpreter used to run the build command, which works well with `pyenv` because Finder-launched apps do not inherit your shell setup. If that interpreter is unavailable later, the app falls back to common `pyenv`, Homebrew, and system `python3` paths.
 
 ## Safety
 
