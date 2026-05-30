@@ -37,6 +37,25 @@ class MacOSAppBuilderTests(unittest.TestCase):
             self.assertIn("ollama_manual_pull", launcher_text)
             self.assertIn("PYENV_ROOT", launcher_text)
 
+    def test_install_app_copies_bundle_to_applications_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            app_path = build_macos_app.build_app(
+                output_dir=root / "dist",
+                python_executable=Path("/Users/example/.pyenv/versions/3.12.13/bin/python3"),
+            )
+            applications_dir = root / "Applications"
+            stale_app = applications_dir / "Ollama Manual Pull.app"
+            stale_app.mkdir(parents=True)
+            (stale_app / "stale.txt").write_text("old")
+
+            installed = build_macos_app.install_app(app_path, applications_dir=applications_dir)
+
+            self.assertEqual(installed, applications_dir / "Ollama Manual Pull.app")
+            self.assertTrue((installed / "Contents" / "Info.plist").is_file())
+            self.assertTrue((installed / "Contents" / "MacOS" / "Ollama Manual Pull").is_file())
+            self.assertFalse((installed / "stale.txt").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

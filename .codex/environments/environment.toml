@@ -57,3 +57,13 @@ PYTHONPATH=src:. ./.venv/bin/python -m unittest discover -s tests -v
 node --check src/ollama_manual_pull/web/app.js
 ./.venv/bin/python scripts/build_macos_app.py --python "$PYENV_PYTHON"
 '''
+
+[[actions]]
+name = "Install Mac App"
+icon = "run"
+command = '''
+cd "$CODEX_WORKTREE_PATH"
+
+PYENV_PYTHON="$(python3 -c 'import sys; print(sys.executable)')"
+./.venv/bin/python scripts/build_macos_app.py --python "$PYENV_PYTHON" --install
+'''

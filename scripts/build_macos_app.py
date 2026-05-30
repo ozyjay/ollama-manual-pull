@@ -36,6 +36,19 @@ def build_app(
     return app_path
 
 
+def install_app(
+    app_path: Path,
+    *,
+    applications_dir: Path = Path("/Applications"),
+) -> Path:
+    destination = applications_dir / app_path.name
+    applications_dir.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        shutil.rmtree(destination)
+    shutil.copytree(app_path, destination)
+    return destination
+
+
 def _write_info_plist(path: Path) -> None:
     payload = {
         "CFBundleDevelopmentRegion": "en",
@@ -83,10 +96,26 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build the macOS app bundle.")
     parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "dist")
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
+    parser.add_argument("--install", action="store_true", help="Copy the app to Applications after building.")
+    parser.add_argument(
+        "--applications-dir",
+        type=Path,
+        default=Path("/Applications"),
+        help="Applications directory to use with --install.",
+    )
     args = parser.parse_args(argv)
 
     app_path = build_app(output_dir=args.output_dir, python_executable=args.python)
-    print(app_path)
+    print(f"Built: {app_path}")
+    if args.install:
+        try:
+            installed = install_app(app_path, applications_dir=args.applications_dir)
+        except PermissionError as error:
+            raise SystemExit(
+                f"Permission denied installing to {args.applications_dir}. "
+                "Try Finder drag-and-drop or rerun with appropriate permissions."
+            ) from error
+        print(f"Installed: {installed}")
     return 0
 
 

@@ -64,6 +64,13 @@ python3 scripts/build_macos_app.py
 open "dist/Ollama Manual Pull.app"
 ```
 
+Install it into Applications:
+
+```bash
+python3 scripts/build_macos_app.py --install
+open "/Applications/Ollama Manual Pull.app"
+```
+
 The app launches the same local web UI and opens it in your browser. The builder bakes in the Python interpreter used to run the build command, which works well with `pyenv` because Finder-launched apps do not inherit your shell setup. If that interpreter is unavailable later, the launcher falls back to common `pyenv`, Homebrew, and system `python3` paths.
 
 ## Safety
