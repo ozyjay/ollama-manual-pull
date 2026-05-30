@@ -213,13 +213,15 @@ h2 {
 }
 
 .results,
-.queue-list {
+.queue-list,
+.installed-list {
   display: grid;
   gap: 8px;
 }
 
 .result-row,
 .queue-row,
+.installed-row,
 .active-card,
 .empty {
   border: 1px solid var(--line);
@@ -236,7 +238,7 @@ h2 {
 }
 
 .result-row {
-  cursor: pointer;
+  cursor: default;
 }
 
 .result-row:hover,
@@ -245,9 +247,16 @@ h2 {
   border-color: var(--blue);
 }
 
-.queue-row {
+.queue-row,
+.installed-row {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
+}
+
+.installed-row {
+  display: grid;
+  gap: 4px;
+  padding: 9px 11px;
 }
 
 .row-title {
@@ -263,11 +272,25 @@ h2 {
 
 .row-meta,
 .tag-list,
-.row-actions {
+.row-actions,
+.variant-list {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+}
+
+.variant-list {
+  padding-top: 2px;
+}
+
+.variant-button {
+  min-height: 30px;
+  max-width: 100%;
+  padding: 5px 9px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .tag,

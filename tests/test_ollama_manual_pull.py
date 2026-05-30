@@ -40,6 +40,36 @@ class OllamaManualPullTests(unittest.TestCase):
                 / "30b",
             )
 
+    def test_installed_models_reads_all_namespaces_from_manifest_layout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            library_dir = root / "manifests" / "registry.ollama.ai" / "library" / "qwen3-coder"
+            custom_dir = root / "manifests" / "registry.ollama.ai" / "someuser" / "custom-model"
+            library_dir.mkdir(parents=True)
+            custom_dir.mkdir(parents=True)
+            (library_dir / "30b").write_text("{}\n")
+            (custom_dir / "q4").write_text("{}\n")
+
+            models = omp.installed_models(root)
+
+        self.assertEqual(
+            models,
+            [
+                {
+                    "name": "qwen3-coder:30b",
+                    "namespace": "library",
+                    "model": "qwen3-coder",
+                    "tag": "30b",
+                },
+                {
+                    "name": "someuser/custom-model:q4",
+                    "namespace": "someuser",
+                    "model": "custom-model",
+                    "tag": "q4",
+                },
+            ],
+        )
+
     def test_verify_file_matches_sha256_digest(self):
         with tempfile.TemporaryDirectory() as tmp:
             file_path = Path(tmp) / "blob"

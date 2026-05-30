@@ -165,6 +165,32 @@ def install_manifest(paths: ModelPaths, manifest: dict[str, Any]) -> None:
     paths.manifest.write_text(json.dumps(manifest, separators=(",", ":")) + "\n")
 
 
+def installed_models(root: Path, host: str = DEFAULT_HOST) -> list[dict[str, str]]:
+    manifests = Path(root) / "manifests" / host
+    if not manifests.is_dir():
+        return []
+
+    models: list[dict[str, str]] = []
+    for tag_path in manifests.glob("*/*/*"):
+        if not tag_path.is_file():
+            continue
+        try:
+            namespace, model, tag = tag_path.relative_to(manifests).parts
+        except ValueError:
+            continue
+        name = f"{model}:{tag}" if namespace == "library" else f"{namespace}/{model}:{tag}"
+        models.append(
+            {
+                "name": name,
+                "namespace": namespace,
+                "model": model,
+                "tag": tag,
+            }
+        )
+
+    return sorted(models, key=lambda item: item["name"].lower())
+
+
 def manifest_digests(manifest: dict[str, Any]) -> list[str]:
     digests = [manifest["config"]["digest"]]
     digests.extend(layer["digest"] for layer in manifest.get("layers", []))

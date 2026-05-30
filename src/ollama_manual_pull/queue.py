@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from .core import DEFAULT_REGISTRY, parse_model_ref, pull_model
+from .core import DEFAULT_REGISTRY, installed_models, parse_model_ref, pull_model
 
 
 PullFunc = Callable[..., None]
@@ -103,6 +103,7 @@ class DownloadQueue:
                 "models_dir": str(self.models_dir),
                 "registry": self.registry,
                 "retries": self.retries,
+                "installed_models": installed_models(self.models_dir),
                 "items": [self._copy_item(item) for item in self._items],
             }
 

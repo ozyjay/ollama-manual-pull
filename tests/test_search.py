@@ -1,7 +1,12 @@
 import unittest
 from unittest import mock
 
-from ollama_manual_pull.search import fetch_search_html, parse_search_results, search_models
+from ollama_manual_pull.search import (
+    fetch_search_html,
+    parse_search_results,
+    parse_tag_results,
+    search_models,
+)
 
 
 SAMPLE_HTML = """
@@ -43,15 +48,65 @@ class SearchTests(unittest.TestCase):
 
         self.assertEqual([result["name"] for result in results], ["qwen3-coder"])
 
-    def test_parse_search_results_accepts_namespaced_model_links(self):
+    def test_parse_search_results_ignores_namespaced_model_links(self):
         results = parse_search_results(
             '<a href="/QwertyMcQwertz/MutualistLLM">'
             "<h2>MutualistLLM</h2><p>Community model</p></a>"
         )
 
-        self.assertEqual(results[0]["name"], "QwertyMcQwertz/MutualistLLM")
-        self.assertEqual(results[0]["heading"], "MutualistLLM")
-        self.assertEqual(results[0]["description"], "Community model")
+        self.assertEqual(results, [])
+
+    def test_parse_tag_results_extracts_official_model_variants(self):
+        results = parse_tag_results(
+            """
+            <a href="/library/qwen3-coder:latest">qwen3-coder:latest</a>
+            <a href="/library/qwen3-coder:30b">qwen3-coder:30b latest</a>
+            <a href="/library/qwen3-coder:480b">qwen3-coder:480b</a>
+            <a href="/library/qwen3-coder:30b">qwen3-coder:30b</a>
+            <a href="/aikid123/Qwen3-coder:latest">qwen3-coder:latest</a>
+            """
+        )
+
+        self.assertEqual(
+            results,
+            [
+                {"name": "qwen3-coder:latest", "label": "latest"},
+                {"name": "qwen3-coder:30b", "label": "30b"},
+                {"name": "qwen3-coder:480b", "label": "480b"},
+            ],
+        )
+
+    def test_search_models_adds_variants_for_official_results(self):
+        pages = {
+            "qwen": SAMPLE_HTML,
+            "qwen3-coder": """
+                <a href="/library/qwen3-coder:30b">qwen3-coder:30b</a>
+                <a href="/library/qwen3-coder:480b">qwen3-coder:480b</a>
+            """,
+            "deepseek-r1": '<a href="/library/deepseek-r1:14b">deepseek-r1:14b</a>',
+        }
+
+        with (
+            mock.patch("ollama_manual_pull.search.fetch_search_html", return_value=pages["qwen"]),
+            mock.patch(
+                "ollama_manual_pull.search.fetch_tag_html",
+                side_effect=lambda model: pages[model],
+            ),
+        ):
+            payload = search_models("qwen")
+
+        self.assertTrue(payload["available"])
+        self.assertEqual(
+            payload["results"][0]["variants"],
+            [
+                {"name": "qwen3-coder:30b", "label": "30b"},
+                {"name": "qwen3-coder:480b", "label": "480b"},
+            ],
+        )
+        self.assertEqual(
+            payload["results"][1]["variants"],
+            [{"name": "deepseek-r1:14b", "label": "14b"}],
+        )
 
     def test_parse_search_results_keeps_nested_inline_heading_and_description_text(self):
         results = parse_search_results(

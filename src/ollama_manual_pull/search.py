@@ -7,16 +7,7 @@ from urllib.request import urlopen
 
 
 SEARCH_URL = "https://ollama.com/search"
-SITE_PATHS = {
-    "about",
-    "blog",
-    "download",
-    "library",
-    "pricing",
-    "search",
-    "signin",
-    "signup",
-}
+LIBRARY_URL = "https://ollama.com/library"
 VOID_TAGS = {
     "area",
     "base",
@@ -53,6 +44,12 @@ def strip_tags(value: str) -> str:
 
 def fetch_search_html(query: str) -> str:
     url = f"{SEARCH_URL}?q={quote_plus(query)}"
+    with urlopen(url, timeout=15) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
+def fetch_tag_html(model: str) -> str:
+    url = f"{LIBRARY_URL}/{quote_plus(model)}/tags"
     with urlopen(url, timeout=15) as response:
         return response.read().decode("utf-8", errors="replace")
 
@@ -133,17 +130,47 @@ def _model_name_from_href(href: str | None) -> str | None:
     if len(parts) == 2 and parts[0] == "library":
         return parts[1]
 
-    if len(parts) != 2:
-        return None
+    return None
 
-    namespace, model_name = parts
-    if namespace.lower() in SITE_PATHS:
+
+class _TagResultParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.results: list[dict[str, str]] = []
+        self.seen_names: set[str] = set()
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "a":
+            return
+
+        name = _variant_name_from_href(dict(attrs).get("href"))
+        if name is None or name in self.seen_names:
+            return
+
+        self.seen_names.add(name)
+        self.results.append({"name": name, "label": _variant_label(name)})
+
+
+def _variant_name_from_href(href: str | None) -> str | None:
+    name = _model_name_from_href(href)
+    if name is None or ":" not in name:
         return None
-    return f"{namespace}/{model_name}"
+    return name
+
+
+def _variant_label(name: str) -> str:
+    return name.split(":", 1)[1]
 
 
 def parse_search_results(page: str) -> list[dict[str, Any]]:
     parser = _SearchResultParser()
+    parser.feed(page)
+    parser.close()
+    return parser.results
+
+
+def parse_tag_results(page: str) -> list[dict[str, str]]:
+    parser = _TagResultParser()
     parser.feed(page)
     parser.close()
     return parser.results
@@ -158,5 +185,11 @@ def search_models(query: str) -> dict[str, Any]:
         results = parse_search_results(page)
     except Exception as error:
         return {"available": False, "results": [], "error": str(error)}
+
+    for result in results:
+        try:
+            result["variants"] = parse_tag_results(fetch_tag_html(result["name"]))
+        except Exception:
+            result["variants"] = []
 
     return {"available": True, "results": results, "error": None}

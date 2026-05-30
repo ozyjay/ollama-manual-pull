@@ -15,6 +15,7 @@ const elements = {
   addDirect: document.getElementById("add-direct"),
   searchStatus: document.getElementById("search-status"),
   searchResults: document.getElementById("search-results"),
+  installed: document.getElementById("installed"),
   active: document.getElementById("active"),
   queue: document.getElementById("queue"),
   start: document.getElementById("start"),
@@ -102,6 +103,20 @@ function queueableName(result) {
   return result?.name || result?.model || result?.heading || "";
 }
 
+function variantName(variant) {
+  if (typeof variant === "string") {
+    return variant;
+  }
+  return variant?.name || "";
+}
+
+function variantLabel(variant) {
+  if (typeof variant === "string") {
+    return variant.split(":", 2)[1] || variant;
+  }
+  return variant?.label || variantName(variant);
+}
+
 function renderTarget() {
   const snapshot = state.snapshot;
   const modelsDir = snapshot?.models_dir || "Waiting for server state";
@@ -125,24 +140,38 @@ function renderSearchResults() {
     return;
   }
 
-  elements.searchStatus.textContent = `${state.searchResults.length} result${state.searchResults.length === 1 ? "" : "s"}. Click a row to queue it.`;
+  elements.searchStatus.textContent = `${state.searchResults.length} official result${state.searchResults.length === 1 ? "" : "s"}. Choose a variant to queue.`;
   elements.searchResults.innerHTML = state.searchResults
     .map((result, index) => {
       const name = queueableName(result);
       const heading = result.heading && result.heading !== name ? result.heading : "";
       const description = result.description || "No description provided.";
       const tags = Array.isArray(result.tags) ? result.tags : [];
+      const variants = Array.isArray(result.variants) ? result.variants : [];
       const tagHtml = tags
         .slice(0, 8)
         .map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`)
         .join("");
+      const variantHtml = variants.length
+        ? variants
+            .map((variant) => {
+              const fullName = variantName(variant);
+              return `
+                <button class="variant-button" type="button" data-model="${escapeHtml(fullName)}" title="${escapeHtml(fullName)}">
+                  ${escapeHtml(variantLabel(variant))}
+                </button>
+              `;
+            })
+            .join("")
+        : `<span class="row-subtitle">Variants unavailable.</span>`;
       return `
-        <button class="result-row" type="button" data-result-index="${index}">
+        <div class="result-row" data-result-index="${index}">
           <span class="row-title">${escapeHtml(name || "Unnamed model")}</span>
           ${heading ? `<span class="row-subtitle">${escapeHtml(heading)}</span>` : ""}
           <span class="row-subtitle">${escapeHtml(description)}</span>
           ${tagHtml ? `<span class="tag-list">${tagHtml}</span>` : ""}
-        </button>
+          <span class="variant-list">${variantHtml}</span>
+        </div>
       `;
     })
     .join("");
@@ -172,6 +201,27 @@ function renderActive() {
       <div class="row-subtitle">${escapeHtml(lastMessage)}</div>
     </div>
   `;
+}
+
+function renderInstalled() {
+  const installed = state.snapshot?.installed_models || [];
+  if (!installed.length) {
+    elements.installed.innerHTML = `<div class="empty muted">No installed model manifests found.</div>`;
+    return;
+  }
+
+  elements.installed.innerHTML = installed
+    .map((model) => {
+      const namespace = model.namespace || "library";
+      const subtitle = namespace === "library" ? "official library" : namespace;
+      return `
+        <div class="installed-row">
+          <span class="row-title">${escapeHtml(model.name || "Unnamed model")}</span>
+          <span class="row-subtitle">${escapeHtml(subtitle)}</span>
+        </div>
+      `;
+    })
+    .join("");
 }
 
 function renderQueue() {
@@ -303,6 +353,7 @@ function renderControls() {
 
 function renderState() {
   renderTarget();
+  renderInstalled();
   renderActive();
   renderQueue();
   renderControls();
@@ -380,13 +431,11 @@ elements.addDirect.addEventListener("click", () => {
 });
 
 elements.searchResults.addEventListener("click", (event) => {
-  const row = event.target.closest("[data-result-index]");
-  if (!row) {
+  const variant = event.target.closest("[data-model]");
+  if (!variant) {
     return;
   }
-  const result = state.searchResults[Number(row.dataset.resultIndex)];
-  const name = queueableName(result);
-  queueModel(name);
+  queueModel(variant.dataset.model || "");
 });
 
 elements.queue.addEventListener("click", async (event) => {

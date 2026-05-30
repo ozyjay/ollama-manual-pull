@@ -25,6 +25,28 @@ class DownloadQueueTests(unittest.TestCase):
             self.assertIn("created_at", item)
             self.assertIn("updated_at", item)
 
+    def test_snapshot_includes_installed_models(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest_dir = root / "manifests" / "registry.ollama.ai" / "library" / "qwen3-coder"
+            manifest_dir.mkdir(parents=True)
+            (manifest_dir / "30b").write_text("{}\n")
+            queue = DownloadQueue(models_dir=root, pull_func=lambda *args, **kwargs: None)
+
+            snapshot = queue.snapshot()
+
+        self.assertEqual(
+            snapshot["installed_models"],
+            [
+                {
+                    "name": "qwen3-coder:30b",
+                    "namespace": "library",
+                    "model": "qwen3-coder",
+                    "tag": "30b",
+                }
+            ],
+        )
+
     def test_worker_runs_one_item_at_a_time(self):
         entered = []
         active = 0
