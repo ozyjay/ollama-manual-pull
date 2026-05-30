@@ -55,6 +55,17 @@ ollama-manual-pull-web
 
 The web UI runs on `127.0.0.1`, queues one model download at a time, and preserves the same safety behavior as the CLI downloader. Search is best effort; direct model references such as `qwen3-coder:30b` always remain supported.
 
+## macOS App
+
+Build a lightweight local `.app` bundle:
+
+```bash
+python3 scripts/build_macos_app.py
+open "dist/Ollama Manual Pull.app"
+```
+
+The app launches the same local web UI and opens it in your browser. The builder bakes in the Python interpreter used to run the build command, which works well with `pyenv` because Finder-launched apps do not inherit your shell setup. If that interpreter is unavailable later, the launcher falls back to common `pyenv`, Homebrew, and system `python3` paths.
+
 ## Safety
 
 - Existing verified blobs are reused.

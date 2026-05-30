@@ -43,3 +43,17 @@ command = '''
 cd "$CODEX_WORKTREE_PATH"
 ./.venv/bin/ollama-manual-pull-web
 '''
+
+[[actions]]
+name = "Verify & Build App"
+icon = "debug"
+command = '''
+cd "$CODEX_WORKTREE_PATH"
+
+PYENV_PYTHON="$(python3 -c 'import sys; print(sys.executable)')"
+
+PYTHONPATH=src:. ./.venv/bin/python -m unittest discover -s tests -v
+./.venv/bin/python -m py_compile src/ollama_manual_pull/*.py tests/*.py scripts/*.py
+node --check src/ollama_manual_pull/web/app.js
+./.venv/bin/python scripts/build_macos_app.py --python "$PYENV_PYTHON"
+'''
