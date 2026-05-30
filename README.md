@@ -57,7 +57,7 @@ The web UI runs on `127.0.0.1`, queues one model download at a time, and preserv
 
 ## macOS App
 
-Build a lightweight local `.app` bundle:
+Build a native local `.app` bundle:
 
 ```bash
 python3 scripts/build_macos_app.py
@@ -71,7 +71,7 @@ python3 scripts/build_macos_app.py --install
 open "/Applications/Ollama Manual Pull.app"
 ```
 
-The app launches the same local web UI and opens it in your browser. The builder bakes in the Python interpreter used to run the build command, which works well with `pyenv` because Finder-launched apps do not inherit your shell setup. If that interpreter is unavailable later, the launcher falls back to common `pyenv`, Homebrew, and system `python3` paths.
+The app opens its own macOS window using WebKit and starts the local Python server in the background. It does not open a separate browser tab. The builder bakes in the Python interpreter used to run the build command, which works well with `pyenv` because Finder-launched apps do not inherit your shell setup. If that interpreter is unavailable later, the app falls back to common `pyenv`, Homebrew, and system `python3` paths.
 
 ## Safety
 
