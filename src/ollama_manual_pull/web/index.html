@@ -20,7 +20,7 @@
       <div id="app-error" class="alert" role="status" aria-live="polite" hidden></div>
 
       <section class="search-panel" aria-labelledby="search-heading">
-        <div class="section-title" id="search-heading">Find or add model</div>
+        <div class="section-title" id="search-heading">Add model</div>
         <form id="search-form" class="search-form">
           <input id="model-input" name="model" autocomplete="off" spellcheck="false" placeholder="Search models or paste a ref, e.g. qwen3-coder:30b">
           <button type="submit">Search</button>
@@ -36,23 +36,23 @@
       </section>
 
       <section aria-labelledby="active-heading">
-        <div class="section-title" id="active-heading">Active download</div>
+        <div class="section-title" id="active-heading">Current download</div>
         <div id="active" class="active-card"></div>
       </section>
 
       <section aria-labelledby="queue-heading">
-        <div class="section-title" id="queue-heading">Queue</div>
+        <div class="section-title" id="queue-heading">Download queue</div>
         <div id="queue" class="queue-list"></div>
       </section>
 
       <footer class="actions">
         <button id="start" type="button">Start</button>
-        <button id="pause" type="button">Pause after current</button>
+        <button id="pause" type="button">Pause after current download</button>
       </footer>
     </section>
 
     <aside class="details" aria-labelledby="details-heading">
-      <h2 id="details-heading">Details</h2>
+      <h2 id="details-heading">Selected item</h2>
       <div id="details"></div>
     </aside>
   </main>

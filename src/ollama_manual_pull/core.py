@@ -139,6 +139,30 @@ def format_progress(
     return f"{format_size(downloaded)} {speed}"
 
 
+def progress_payload(
+    *,
+    downloaded: int,
+    total: int | None,
+    bytes_per_second: float,
+) -> dict[str, Any]:
+    percent = downloaded / total * 100 if total and total > 0 else None
+    eta_seconds = None
+    if total and total > 0 and bytes_per_second > 0:
+        eta_seconds = int(max(total - downloaded, 0) / bytes_per_second)
+    return {
+        "downloaded": downloaded,
+        "total": total,
+        "percent": percent,
+        "bytes_per_second": bytes_per_second,
+        "eta_seconds": eta_seconds,
+        "line": format_progress(
+            downloaded=downloaded,
+            total=total,
+            bytes_per_second=bytes_per_second,
+        ),
+    }
+
+
 def emit_progress(progress: ProgressCallback | None, event: dict[str, Any]) -> None:
     if progress is not None:
         try:
@@ -197,6 +221,23 @@ def manifest_digests(manifest: dict[str, Any]) -> list[str]:
     return digests
 
 
+def manifest_files(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    files = [
+        {
+            "digest": manifest["config"]["digest"],
+            "size": manifest["config"].get("size"),
+        }
+    ]
+    files.extend(
+        {
+            "digest": layer["digest"],
+            "size": layer.get("size"),
+        }
+        for layer in manifest.get("layers", [])
+    )
+    return files
+
+
 def download_blob(
     *,
     registry: str,
@@ -217,6 +258,7 @@ def download_blob(
     url = f"{registry.rstrip('/')}/v2/{ref.namespace}/{ref.name}/blobs/{digest}"
 
     if verify_file(final, digest):
+        size = final.stat().st_size
         print(f"OK already present: {final.name}", flush=True)
         emit_progress(
             progress,
@@ -225,6 +267,9 @@ def download_blob(
                 "digest": digest,
                 "path": str(final),
                 "reused": True,
+                "downloaded": size,
+                "total": size,
+                "percent": 100.0,
             },
         )
         return
@@ -294,21 +339,29 @@ def download_blob(
                     now = time.monotonic()
                     if now - last_printed >= 0.5:
                         elapsed = max(now - started, 0.001)
-                        line = format_progress(
+                        payload = progress_payload(
                             downloaded=downloaded,
                             total=total_bytes,
                             bytes_per_second=(downloaded - resume_at) / elapsed,
                         )
-                        print(f"\r{line}", end="", flush=True)
+                        print(f"\r{payload['line']}", end="", flush=True)
+                        emit_progress(
+                            progress,
+                            {
+                                "type": "blob-progress",
+                                "digest": digest,
+                                **payload,
+                            },
+                        )
                         last_printed = now
 
                 elapsed = max(time.monotonic() - started, 0.001)
-                line = format_progress(
+                payload = progress_payload(
                     downloaded=downloaded,
                     total=total_bytes,
                     bytes_per_second=(downloaded - resume_at) / elapsed,
                 )
-                print(f"\r{line}", flush=True)
+                print(f"\r{payload['line']}", flush=True)
 
             if verify_file(temp, digest):
                 temp.replace(final)
@@ -320,6 +373,9 @@ def download_blob(
                         "digest": digest,
                         "path": str(final),
                         "reused": False,
+                        "downloaded": downloaded,
+                        "total": total_bytes,
+                        "percent": payload["percent"],
                     },
                 )
                 return
@@ -366,6 +422,18 @@ def pull_model(
         },
     )
     manifest = fetch_json(manifest_url, retries=retries)
+    files = manifest_files(manifest)
+    sizes = [file.get("size") for file in files]
+    total_bytes = sum(sizes) if all(isinstance(size, int) for size in sizes) else None
+    emit_progress(
+        progress,
+        {
+            "type": "model-plan",
+            "model": model,
+            "total_bytes": total_bytes,
+            "files": files,
+        },
+    )
 
     for digest in manifest_digests(manifest):
         download_blob(

@@ -95,6 +95,107 @@ function formatTime(seconds) {
   return date.toLocaleString();
 }
 
+function formatBytes(value) {
+  if (!Number.isFinite(value)) {
+    return "Unknown";
+  }
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = Number(value);
+  for (const unit of units) {
+    if (Math.abs(size) < 1000 || unit === units[units.length - 1]) {
+      return unit === "B" ? `${Math.round(size)}B` : `${size.toFixed(1)}${unit}`;
+    }
+    size /= 1000;
+  }
+  return `${size.toFixed(1)}TB`;
+}
+
+function formatRate(value) {
+  return Number.isFinite(value) ? `${formatBytes(value)}/s` : "Unknown";
+}
+
+function formatEta(seconds) {
+  if (!Number.isFinite(seconds)) {
+    return "Unknown";
+  }
+  const safeSeconds = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remaining = safeSeconds % 60;
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}h ${mins}m`;
+  }
+  return `${minutes}m ${String(remaining).padStart(2, "0")}s`;
+}
+
+function clampPercent(value) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  return Math.max(0, Math.min(100, value));
+}
+
+function percentText(value) {
+  const percent = clampPercent(value);
+  return percent === null ? "" : `${percent.toFixed(1)}%`;
+}
+
+function progressAmountText(progress) {
+  if (!progress) {
+    return "Waiting for progress";
+  }
+  const downloaded = formatBytes(progress.downloaded);
+  if (Number.isFinite(progress.total)) {
+    return `${downloaded} of ${formatBytes(progress.total)}`;
+  }
+  return `${downloaded} downloaded`;
+}
+
+function progressBar(progress, label) {
+  const percent = clampPercent(progress?.percent);
+  if (percent === null) {
+    return "";
+  }
+  return `
+    <div class="progress-track" role="progressbar" aria-label="${escapeHtml(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${escapeHtml(percent.toFixed(0))}">
+      <span class="progress-fill" style="width: ${escapeHtml(percent.toFixed(2))}%"></span>
+    </div>
+  `;
+}
+
+function renderProgressBlock(progress, options = {}) {
+  const overall = progress?.overall || {};
+  const currentFile = progress?.current_file || {};
+  const overallPercent = percentText(overall.percent);
+  const currentPercent = percentText(currentFile.percent);
+  const speed = currentFile.bytes_per_second;
+  const eta = currentFile.eta_seconds;
+  return `
+    <div class="${escapeHtml(options.compact ? "progress-block compact" : "progress-block")}">
+      ${progressBar(overall, "Overall download progress")}
+      <div class="progress-summary">
+        <span>${escapeHtml(overallPercent || progressAmountText(overall))}</span>
+        <span>${escapeHtml(progressAmountText(overall))}</span>
+      </div>
+      ${
+        options.showFile === false
+          ? ""
+          : `<div class="progress-file">
+              <span class="field-label">Current file</span>
+              <span class="blob">${escapeHtml(currentFile.digest || "Waiting for file")}</span>
+              ${progressBar(currentFile, "Current file progress")}
+              <span class="row-subtitle">
+                ${escapeHtml(currentPercent || progressAmountText(currentFile))}
+                ${Number.isFinite(speed) ? ` &middot; ${escapeHtml(formatRate(speed))}` : ""}
+                ${Number.isFinite(eta) ? ` &middot; ETA ${escapeHtml(formatEta(eta))}` : ""}
+              </span>
+            </div>`
+      }
+    </div>
+  `;
+}
+
 function itemById(id) {
   return state.snapshot?.items?.find((item) => item.id === id) || null;
 }
@@ -122,9 +223,9 @@ function renderTarget() {
   const modelsDir = snapshot?.models_dir || "Waiting for server state";
   const registry = snapshot?.registry || "registry unavailable";
   elements.target.innerHTML = `
-    <span class="target-label">Models path</span>
+    <span class="target-label">Models directory</span>
     <div>${escapeHtml(modelsDir)}</div>
-    <span class="target-label">Registry</span>
+    <span class="target-label">Source registry</span>
     <div>${escapeHtml(registry)}</div>
   `;
 }
@@ -140,7 +241,7 @@ function renderSearchResults() {
     return;
   }
 
-  elements.searchStatus.textContent = `${state.searchResults.length} official result${state.searchResults.length === 1 ? "" : "s"}. Choose a variant to queue.`;
+  elements.searchStatus.textContent = `${state.searchResults.length} official result${state.searchResults.length === 1 ? "" : "s"}. Choose a version to queue.`;
   elements.searchResults.innerHTML = state.searchResults
     .map((result, index) => {
       const name = queueableName(result);
@@ -197,7 +298,7 @@ function renderActive() {
         ${statusBadge(running.status)}
         <span class="row-title">${escapeHtml(running.model)}</span>
       </div>
-      <div class="blob">${escapeHtml(running.current_blob || "No blob reported yet")}</div>
+      ${renderProgressBlock(running.progress)}
       <div class="row-subtitle">${escapeHtml(lastMessage)}</div>
     </div>
   `;
@@ -243,6 +344,8 @@ function renderQueue() {
       const selected = item.id === state.selectedId ? " selected" : "";
       const removable = item.status !== "running";
       const retryable = item.status === "failed";
+      const progressHtml =
+        item.status === "running" ? renderProgressBlock(item.progress, { compact: true, showFile: false }) : "";
       const actionHtml = `
         <span class="row-actions">
           ${retryable ? `<button class="small" type="button" data-action="retry" data-id="${escapeHtml(item.id)}">Retry</button>` : ""}
@@ -258,6 +361,7 @@ function renderQueue() {
             </div>
             <div class="row-subtitle">Updated ${escapeHtml(formatTime(item.updated_at))}</div>
             ${item.error ? `<div class="row-subtitle">${escapeHtml(item.error)}</div>` : ""}
+            ${progressHtml}
           </div>
           ${actionHtml}
         </div>
@@ -298,7 +402,7 @@ function renderDetails() {
         <span class="detail-value">${statusBadge(item.status)}</span>
       </div>
       <div class="detail-field">
-        <span class="field-label">Registry</span>
+        <span class="field-label">Source registry</span>
         <span class="detail-value">${escapeHtml(state.snapshot?.registry || "Unknown")}</span>
       </div>
       <div class="detail-field">
@@ -306,15 +410,15 @@ function renderDetails() {
         <span class="detail-value">${escapeHtml(state.snapshot?.retries ?? "Unknown")}</span>
       </div>
       <div class="detail-field">
-        <span class="field-label">Current blob</span>
-        <span class="detail-value blob">${escapeHtml(item.current_blob || "None")}</span>
+        <span class="field-label">Progress</span>
+        ${renderProgressBlock(item.progress)}
       </div>
       <div class="detail-field">
         <span class="field-label">Error</span>
         <span class="detail-value">${escapeHtml(item.error || "None")}</span>
       </div>
       <div class="detail-field">
-        <span class="field-label">Recent messages</span>
+        <span class="field-label">Activity</span>
         ${messageHtml}
       </div>
       ${

@@ -21,6 +21,14 @@ class DownloadQueueTests(unittest.TestCase):
             self.assertIsNone(item["error"])
             self.assertIsNone(item["current_blob"])
             self.assertEqual(item["messages"], [])
+            self.assertEqual(
+                item["progress"],
+                {
+                    "phase": "waiting",
+                    "overall": {"downloaded": 0, "total": None, "percent": None},
+                    "current_file": None,
+                },
+            )
             self.assertIn("id", item)
             self.assertIn("created_at", item)
             self.assertIn("updated_at", item)
@@ -82,6 +90,119 @@ class DownloadQueueTests(unittest.TestCase):
         self.assertIn("blob-start", snapshot["items"][0]["messages"])
         self.assertEqual(first["status"], "waiting")
         self.assertEqual(second["status"], "waiting")
+
+    def test_progress_tracks_model_plan_blob_progress_and_completion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = DownloadQueue(models_dir=Path(tmp), pull_func=lambda *args, **kwargs: None)
+            item = queue.add("qwen3-coder:30b")
+            item_id = item["id"]
+
+            queue._record_progress(
+                item_id,
+                {
+                    "type": "model-plan",
+                    "total_bytes": 10,
+                    "files": [
+                        {"digest": "sha256:first", "size": 4},
+                        {"digest": "sha256:second", "size": 6},
+                    ],
+                },
+            )
+            queue._record_progress(
+                item_id,
+                {
+                    "type": "blob-progress",
+                    "digest": "sha256:first",
+                    "downloaded": 2,
+                    "total": 4,
+                    "percent": 50.0,
+                    "bytes_per_second": 8.0,
+                    "eta_seconds": 1,
+                    "line": "50.0% 2B/4B 8B/s eta 0m01s",
+                },
+            )
+
+            snapshot = queue.snapshot()
+
+            progress = snapshot["items"][0]["progress"]
+            self.assertEqual(progress["phase"], "downloading")
+            self.assertEqual(progress["overall"], {"downloaded": 2, "total": 10, "percent": 20.0})
+            self.assertEqual(
+                progress["current_file"],
+                {
+                    "digest": "sha256:first",
+                    "downloaded": 2,
+                    "total": 4,
+                    "percent": 50.0,
+                    "bytes_per_second": 8.0,
+                    "eta_seconds": 1,
+                    "line": "50.0% 2B/4B 8B/s eta 0m01s",
+                },
+            )
+
+            queue._record_progress(
+                item_id,
+                {
+                    "type": "blob-complete",
+                    "digest": "sha256:first",
+                    "downloaded": 4,
+                    "total": 4,
+                    "percent": 100.0,
+                },
+            )
+            queue._record_progress(
+                item_id,
+                {
+                    "type": "model-complete",
+                    "model": "qwen3-coder:30b",
+                },
+            )
+
+            snapshot = queue.snapshot()
+
+        progress = snapshot["items"][0]["progress"]
+        self.assertEqual(progress["phase"], "completed")
+        self.assertEqual(progress["overall"], {"downloaded": 10, "total": 10, "percent": 100.0})
+        self.assertEqual(progress["current_file"]["percent"], 100.0)
+
+    def test_progress_handles_retry_and_unknown_totals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = DownloadQueue(models_dir=Path(tmp), pull_func=lambda *args, **kwargs: None)
+            item = queue.add("qwen3-coder:30b")
+            item_id = item["id"]
+
+            queue._record_progress(item_id, {"type": "blob-start", "digest": "sha256:unknown"})
+            queue._record_progress(
+                item_id,
+                {
+                    "type": "blob-progress",
+                    "digest": "sha256:unknown",
+                    "downloaded": 12,
+                    "total": None,
+                    "percent": None,
+                    "bytes_per_second": 3.0,
+                    "eta_seconds": None,
+                    "line": "12B 3B/s",
+                },
+            )
+            queue._record_progress(
+                item_id,
+                {
+                    "type": "blob-retry",
+                    "digest": "sha256:unknown",
+                    "error": "temporary network issue",
+                    "attempt": 1,
+                },
+            )
+
+            snapshot = queue.snapshot()
+
+        progress = snapshot["items"][0]["progress"]
+        self.assertEqual(progress["phase"], "retrying")
+        self.assertEqual(progress["overall"], {"downloaded": 12, "total": None, "percent": None})
+        self.assertEqual(progress["current_file"]["digest"], "sha256:unknown")
+        self.assertIsNone(progress["current_file"]["total"])
+        self.assertIsNone(progress["current_file"]["percent"])
 
     def test_concurrent_start_calls_reserve_single_worker_slot(self):
         active = 0

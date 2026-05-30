@@ -350,6 +350,47 @@ h2 {
   gap: 8px;
 }
 
+.progress-block {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.progress-block.compact {
+  margin-top: 7px;
+}
+
+.progress-track {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--neutral-soft);
+}
+
+.progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue);
+}
+
+.progress-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.progress-file {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .blob {
   color: var(--muted-strong);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

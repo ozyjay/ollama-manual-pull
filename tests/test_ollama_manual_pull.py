@@ -262,9 +262,54 @@ class OllamaManualPullTests(unittest.TestCase):
                         "digest": digest,
                         "path": str(final),
                         "reused": True,
+                        "downloaded": len(b"model bytes"),
+                        "total": len(b"model bytes"),
+                        "percent": 100.0,
                     }
                 ],
             )
+
+    def test_download_blob_reports_structured_progress_for_active_download(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ref = omp.parse_model_ref("qwen3-coder:30b")
+            paths = omp.model_paths(Path(tmp), ref)
+            digest = "sha256:" + hashlib.sha256(b"abcdef").hexdigest()
+            events = []
+
+            class FakeResponse(io.BytesIO):
+                headers = {"Content-Length": "6"}
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, traceback):
+                    self.close()
+
+            with (
+                mock.patch.object(core.urllib.request, "urlopen", return_value=FakeResponse(b"abcdef")),
+                mock.patch.object(core.time, "monotonic", side_effect=[0.0, 0.6, 0.8]),
+            ):
+                omp.download_blob(
+                    registry=omp.DEFAULT_REGISTRY,
+                    ref=ref,
+                    paths=paths,
+                    digest=digest,
+                    retries=0,
+                    dry_run=False,
+                    progress=events.append,
+                )
+
+            progress_events = [event for event in events if event["type"] == "blob-progress"]
+            self.assertEqual(len(progress_events), 1)
+            self.assertEqual(progress_events[0]["digest"], digest)
+            self.assertEqual(progress_events[0]["downloaded"], 6)
+            self.assertEqual(progress_events[0]["total"], 6)
+            self.assertEqual(progress_events[0]["percent"], 100.0)
+            self.assertGreater(progress_events[0]["bytes_per_second"], 0)
+            self.assertEqual(progress_events[0]["eta_seconds"], 0)
+            self.assertIn("100.0%", progress_events[0]["line"])
+            self.assertEqual(events[-1]["downloaded"], 6)
+            self.assertEqual(events[-1]["total"], 6)
 
     def test_download_blob_wraps_progress_callback_error_for_existing_verified_blob(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -336,6 +381,36 @@ class OllamaManualPullTests(unittest.TestCase):
             manifest_url_seen,
             [
                 "https://registry.ollama.ai/v2/library/qwen3-coder/manifests/30b",
+            ],
+        )
+
+    def test_pull_model_reports_model_plan_after_manifest_fetch(self):
+        events = []
+        manifest = {
+            "schemaVersion": 2,
+            "config": {"digest": "sha256:" + "a" * 64, "size": 3},
+            "layers": [{"digest": "sha256:" + "b" * 64, "size": 5}],
+        }
+
+        with mock.patch.object(omp.core, "fetch_json", return_value=manifest):
+            with tempfile.TemporaryDirectory() as tmp:
+                omp.pull_model(
+                    "qwen3-coder:30b",
+                    models_dir=Path(tmp),
+                    registry=omp.DEFAULT_REGISTRY,
+                    retries=0,
+                    dry_run=True,
+                    progress=events.append,
+                )
+
+        self.assertEqual(events[1]["type"], "model-plan")
+        self.assertEqual(events[1]["model"], "qwen3-coder:30b")
+        self.assertEqual(events[1]["total_bytes"], 8)
+        self.assertEqual(
+            events[1]["files"],
+            [
+                {"digest": "sha256:" + "a" * 64, "size": 3},
+                {"digest": "sha256:" + "b" * 64, "size": 5},
             ],
         )
 

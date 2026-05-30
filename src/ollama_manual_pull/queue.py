@@ -12,6 +12,14 @@ from .core import DEFAULT_REGISTRY, installed_models, parse_model_ref, pull_mode
 PullFunc = Callable[..., None]
 
 
+def _empty_progress() -> dict[str, Any]:
+    return {
+        "phase": "waiting",
+        "overall": {"downloaded": 0, "total": None, "percent": None},
+        "current_file": None,
+    }
+
+
 class DownloadQueue:
     def __init__(
         self,
@@ -41,6 +49,9 @@ class DownloadQueue:
             "error": None,
             "current_blob": None,
             "messages": [],
+            "progress": _empty_progress(),
+            "_planned_files": {},
+            "_completed_files": {},
             "created_at": now,
             "updated_at": now,
         }
@@ -78,6 +89,9 @@ class DownloadQueue:
             item["status"] = "waiting"
             item["error"] = None
             item["current_blob"] = None
+            item["progress"] = _empty_progress()
+            item["_planned_files"] = {}
+            item["_completed_files"] = {}
             item["updated_at"] = time.time()
             self._condition.notify_all()
             return self._copy_item(item)
@@ -151,11 +165,13 @@ class DownloadQueue:
                     with self._condition:
                         item["status"] = "failed"
                         item["error"] = str(error)
+                        item["progress"]["phase"] = "failed"
                         item["updated_at"] = time.time()
                         self._condition.notify_all()
                 else:
                     with self._condition:
                         item["status"] = "completed"
+                        self._complete_progress_locked(item)
                         item["updated_at"] = time.time()
                         self._condition.notify_all()
         finally:
@@ -169,11 +185,103 @@ class DownloadQueue:
             event_type = event.get("type")
             if event_type is not None:
                 item["messages"].append(str(event_type))
+                self._update_progress_locked(item, event)
             digest = event.get("digest")
             if digest is not None:
                 item["current_blob"] = str(digest)
             item["updated_at"] = time.time()
             self._condition.notify_all()
+
+    def _update_progress_locked(self, item: dict[str, Any], event: dict[str, Any]) -> None:
+        event_type = event.get("type")
+        progress = item["progress"]
+        if event_type == "manifest-fetch":
+            progress["phase"] = "fetching"
+            return
+        if event_type == "model-plan":
+            planned = {
+                str(file["digest"]): file.get("size")
+                for file in event.get("files", [])
+                if file.get("digest") is not None
+            }
+            item["_planned_files"] = planned
+            progress["overall"] = {
+                "downloaded": 0,
+                "total": event.get("total_bytes"),
+                "percent": None,
+            }
+            return
+        if event_type == "blob-start":
+            progress["phase"] = "downloading"
+            progress["current_file"] = {
+                "digest": event.get("digest"),
+                "downloaded": event.get("resume_at", 0),
+                "total": item["_planned_files"].get(event.get("digest")),
+                "percent": None,
+                "bytes_per_second": None,
+                "eta_seconds": None,
+                "line": None,
+            }
+            self._refresh_overall_locked(item)
+            return
+        if event_type == "blob-progress":
+            progress["phase"] = "downloading"
+            progress["current_file"] = self._file_progress_from_event(event)
+            self._refresh_overall_locked(item)
+            return
+        if event_type == "blob-complete":
+            digest = event.get("digest")
+            if digest is not None:
+                item["_completed_files"][str(digest)] = event.get("total") or event.get("downloaded")
+            progress["current_file"] = self._file_progress_from_event(event)
+            self._refresh_overall_locked(item)
+            return
+        if event_type == "blob-retry":
+            progress["phase"] = "retrying"
+            if progress["current_file"] is None:
+                progress["current_file"] = {"digest": event.get("digest")}
+            return
+        if event_type == "model-complete":
+            self._complete_progress_locked(item)
+
+    def _file_progress_from_event(self, event: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "digest": event.get("digest"),
+            "downloaded": event.get("downloaded"),
+            "total": event.get("total"),
+            "percent": event.get("percent"),
+            "bytes_per_second": event.get("bytes_per_second"),
+            "eta_seconds": event.get("eta_seconds"),
+            "line": event.get("line"),
+        }
+
+    def _refresh_overall_locked(self, item: dict[str, Any]) -> None:
+        progress = item["progress"]
+        current = progress.get("current_file") or {}
+        completed = sum(
+            size for size in item["_completed_files"].values() if isinstance(size, int)
+        )
+        current_digest = current.get("digest")
+        current_downloaded = current.get("downloaded")
+        if current_digest in item["_completed_files"]:
+            current_downloaded = 0
+        elif not isinstance(current_downloaded, int):
+            current_downloaded = 0
+        downloaded = completed + current_downloaded
+        total = progress["overall"].get("total")
+        percent = downloaded / total * 100 if total and total > 0 else None
+        progress["overall"] = {
+            "downloaded": downloaded,
+            "total": total,
+            "percent": percent,
+        }
+
+    def _complete_progress_locked(self, item: dict[str, Any]) -> None:
+        progress = item["progress"]
+        total = progress["overall"].get("total")
+        if total and total > 0:
+            progress["overall"] = {"downloaded": total, "total": total, "percent": 100.0}
+        progress["phase"] = "completed"
 
     def _next_waiting_item(self) -> dict[str, Any] | None:
         for item in self._items:
@@ -193,6 +301,13 @@ class DownloadQueue:
         self._condition.notify_all()
 
     def _copy_item(self, item: dict[str, Any]) -> dict[str, Any]:
-        copied = dict(item)
+        copied = {key: value for key, value in item.items() if not key.startswith("_")}
         copied["messages"] = list(item["messages"])
+        copied["progress"] = {
+            "phase": item["progress"]["phase"],
+            "overall": dict(item["progress"]["overall"]),
+            "current_file": dict(item["progress"]["current_file"])
+            if item["progress"]["current_file"] is not None
+            else None,
+        }
         return copied
