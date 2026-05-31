@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct OllamaManualPullApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = AppStore()
     @StateObject private var supervisor = PythonServerSupervisor()
 
@@ -13,17 +14,19 @@ struct OllamaManualPullApp: App {
                 .frame(minWidth: 1040, minHeight: 700)
                 .background(HostingViewMarker())
                 .onAppear {
+                    appDelegate.onTerminate = {
+                        store.stopRefreshLoop()
+                        supervisor.stop()
+                    }
                     supervisor.onURL = { store.connect(to: $0) }
                     supervisor.onStartupError = { store.showStartupError($0) }
                     supervisor.start()
                     NSApplication.shared.activate(ignoringOtherApps: true)
                 }
-                .onDisappear {
-                    store.stopRefreshLoop()
-                    supervisor.stop()
-                }
         }
         .commands {
+            CommandGroup(replacing: .newItem) {}
+
             CommandGroup(replacing: .appTermination) {
                 Button("Quit Ollama Manual Pull") {
                     NSApplication.shared.terminate(nil)
@@ -66,6 +69,14 @@ struct OllamaManualPullApp: App {
                 .disabled(store.isRefreshing)
             }
         }
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    var onTerminate: (() -> Void)?
+
+    func applicationWillTerminate(_ notification: Notification) {
+        onTerminate?()
     }
 }
 
