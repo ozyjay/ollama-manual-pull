@@ -105,8 +105,9 @@ final class AppStore: ObservableObject {
             } else {
                 searchStatus = "\(payload.results.count) official result\(payload.results.count == 1 ? "" : "s"). Choose a version to queue."
             }
-            appError = nil
+            clearActionError(prefix: "Search failed:")
         } catch {
+            if isCancellation(error) || Task.isCancelled { return }
             searchResults = []
             searchStatus = ""
             appError = "Search failed: \(error.localizedDescription)"
@@ -128,9 +129,10 @@ final class AppStore: ObservableObject {
             selectedId = item.id
             searchText = ""
             searchStatus = (item.deduplicated ?? false) ? "Already in queue: \(item.canonicalModel ?? item.model)." : "Queued \(trimmed)."
-            appError = nil
+            clearActionError(prefix: "Queue failed:")
             await refreshState()
         } catch {
+            if isCancellation(error) || Task.isCancelled { return }
             appError = "Queue failed: \(error.localizedDescription)"
         }
     }
@@ -139,9 +141,10 @@ final class AppStore: ObservableObject {
         guard let apiClient else { return }
         do {
             _ = try await apiClient.startQueue()
-            appError = nil
+            clearActionError(prefix: "Start failed:")
             await refreshState()
         } catch {
+            if isCancellation(error) || Task.isCancelled { return }
             appError = "Start failed: \(error.localizedDescription)"
         }
     }
@@ -150,9 +153,10 @@ final class AppStore: ObservableObject {
         guard let apiClient else { return }
         do {
             _ = try await apiClient.pauseAfterCurrent()
-            appError = nil
+            clearActionError(prefix: "Pause failed:")
             await refreshState()
         } catch {
+            if isCancellation(error) || Task.isCancelled { return }
             appError = "Pause failed: \(error.localizedDescription)"
         }
     }
@@ -172,9 +176,10 @@ final class AppStore: ObservableObject {
         do {
             let next = try await apiClient.retry(item)
             selectedId = next.id
-            appError = nil
+            clearActionError(prefix: "Retry failed:")
             await refreshState()
         } catch {
+            if isCancellation(error) || Task.isCancelled { return }
             appError = "Retry failed: \(error.localizedDescription)"
         }
     }
@@ -186,9 +191,10 @@ final class AppStore: ObservableObject {
             if selectedId == item.id {
                 selectedId = nil
             }
-            appError = nil
+            clearActionError(prefix: "Remove failed:")
             await refreshState()
         } catch {
+            if isCancellation(error) || Task.isCancelled { return }
             appError = "Remove failed: \(error.localizedDescription)"
         }
     }
@@ -209,6 +215,12 @@ final class AppStore: ObservableObject {
 
     private func clearStateRefreshError() {
         if appError?.hasPrefix("State refresh failed:") == true {
+            appError = nil
+        }
+    }
+
+    private func clearActionError(prefix: String) {
+        if appError?.hasPrefix(prefix) == true {
             appError = nil
         }
     }
