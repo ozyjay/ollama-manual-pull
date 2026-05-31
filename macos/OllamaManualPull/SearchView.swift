@@ -60,6 +60,14 @@ private struct SearchResultRow: View {
     @EnvironmentObject private var store: AppStore
     let result: SearchResult
 
+    private var isDownloadedResult: Bool {
+        !result.queueableName.isEmpty && store.isDownloaded(modelRef: result.queueableName)
+    }
+
+    private var downloadedVariantCount: Int {
+        (result.variants ?? []).filter { store.isDownloaded(modelRef: $0.name) }.count
+    }
+
     private var title: String {
         result.heading ?? result.name ?? "Untitled model"
     }
@@ -76,8 +84,15 @@ private struct SearchResultRow: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
+                    HStack(spacing: 8) {
+                        Text(title)
+                            .font(.headline)
+                        if isDownloadedResult {
+                            DownloadedBadge(text: "Downloaded")
+                        } else if downloadedVariantCount > 0 {
+                            DownloadedBadge(text: "\(downloadedVariantCount) downloaded")
+                        }
+                    }
                     if let subtitle, !subtitle.isEmpty {
                         Text(subtitle)
                             .font(.caption)
@@ -109,9 +124,20 @@ private struct SearchResultRow: View {
             if let variants = result.variants, !variants.isEmpty {
                 HStack(spacing: 6) {
                     ForEach(Array(variants.prefix(8))) { variant in
+                        let isDownloadedVariant = store.isDownloaded(modelRef: variant.name)
                         Button(variant.label ?? variant.name) {
                             Task { await store.queue(variant.name) }
                         }
+                        .labelStyle(.titleAndIcon)
+                        .overlay(alignment: .topTrailing) {
+                            if isDownloadedVariant {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                    .font(.caption2)
+                                    .offset(x: 5, y: -5)
+                            }
+                        }
+                        .help(isDownloadedVariant ? "Downloaded" : "Queue this variant")
                     }
                 }
                 .buttonStyle(.bordered)
@@ -120,6 +146,20 @@ private struct SearchResultRow: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
+    }
+}
+
+private struct DownloadedBadge: View {
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: "checkmark.circle.fill")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.green)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Color.green.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 }
 

@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from .core import DEFAULT_REGISTRY, installed_models, parse_model_ref, pull_model
+from .core import DEFAULT_REGISTRY, delete_installed_model, installed_models, parse_model_ref, pull_model
 
 
 PullFunc = Callable[..., None]
@@ -122,6 +122,9 @@ class DownloadQueue:
                 self._condition.notify_all()
                 return self._copy_item(removed)
         raise KeyError(item_id)
+
+    def delete_installed_model(self, model: str) -> None:
+        delete_installed_model(self.models_dir, model)
 
     def snapshot(self) -> dict[str, Any]:
         with self._condition:

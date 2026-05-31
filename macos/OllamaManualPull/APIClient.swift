@@ -36,6 +36,10 @@ struct APIClient {
         try await request("/api/remove/\(encodedPath(item.id))", method: "POST")
     }
 
+    func deleteInstalledModel(_ model: InstalledModel) async throws -> OKResponse {
+        try await request("/api/installed/remove", method: "POST", json: ["model": model.name])
+    }
+
     private func request<T: Decodable>(_ path: String, method: String = "GET", json: [String: String]? = nil) async throws -> T {
         guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
             throw APIError(message: "Local app server is not ready.")

@@ -91,6 +91,39 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(second["canonical_model"], "qwen3-coder:latest")
         self.assertEqual(len(state["items"]), 1)
 
+    def test_installed_remove_endpoint_deletes_model_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = (
+                Path(tmp)
+                / "manifests"
+                / "registry.ollama.ai"
+                / "library"
+                / "qwen3-coder"
+                / "30b"
+            )
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text('{"config":{"digest":"sha256:' + "a" * 64 + '"},"layers":[]}\n')
+            blob = Path(tmp) / "blobs" / ("sha256-" + "a" * 64)
+            blob.parent.mkdir()
+            blob.write_text("blob stays")
+            base_url = self.start_server(tmp)
+
+            remove_status, remove_payload = self.request_json(
+                f"{base_url}/api/installed/remove",
+                method="POST",
+                body={"model": "qwen3-coder:30b"},
+            )
+            state_status, state = self.request_json(f"{base_url}/api/state")
+            manifest_exists = manifest.exists()
+            blob_exists = blob.exists()
+
+        self.assertEqual(remove_status, 200)
+        self.assertEqual(remove_payload, {"ok": True})
+        self.assertEqual(state_status, 200)
+        self.assertFalse(manifest_exists)
+        self.assertTrue(blob_exists)
+        self.assertEqual(state["installed_models"], [])
+
     def test_search_endpoint_url_decodes_query(self):
         with tempfile.TemporaryDirectory() as tmp:
             base_url = self.start_server(tmp)

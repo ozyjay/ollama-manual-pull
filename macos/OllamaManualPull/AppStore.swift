@@ -38,6 +38,14 @@ final class AppStore: ObservableObject {
         return item.status != "running"
     }
 
+    var installedModelRefs: Set<String> {
+        Set((snapshot?.installedModels ?? []).map { normalizedModelRef($0.name) })
+    }
+
+    func isDownloaded(modelRef: String) -> Bool {
+        installedModelRefs.contains(normalizedModelRef(modelRef))
+    }
+
     func connect(to url: URL) {
         apiClient = APIClient(baseURL: url)
         serverReady = true
@@ -199,6 +207,18 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func deleteInstalledModel(_ model: InstalledModel) async {
+        guard let apiClient else { return }
+        do {
+            _ = try await apiClient.deleteInstalledModel(model)
+            clearActionError(prefix: "Delete model failed:")
+            await refreshState()
+        } catch {
+            if isCancellation(error) || Task.isCancelled { return }
+            appError = "Delete model failed: \(error.localizedDescription)"
+        }
+    }
+
     private func startRefreshLoop() {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
@@ -236,6 +256,19 @@ final class AppStore: ObservableObject {
             return
         }
         selectedId = snapshot.items.first(where: { $0.status == "running" })?.id ?? snapshot.items.first?.id
+    }
+
+    private func normalizedModelRef(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !trimmed.isEmpty else { return "" }
+        let namespaced = trimmed.contains("/") ? trimmed : "library/\(trimmed)"
+        guard let slash = namespaced.lastIndex(of: "/") else { return namespaced }
+        let nameStart = namespaced.index(after: slash)
+        let nameAndTag = namespaced[nameStart...]
+        if nameAndTag.contains(":") {
+            return namespaced
+        }
+        return "\(namespaced):latest"
     }
 }
 

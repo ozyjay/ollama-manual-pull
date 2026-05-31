@@ -215,6 +215,24 @@ def installed_models(root: Path, host: str = DEFAULT_HOST) -> list[dict[str, str
     return sorted(models, key=lambda item: item["name"].lower())
 
 
+def delete_installed_model(root: Path, model: str, host: str = DEFAULT_HOST) -> None:
+    ref = parse_model_ref(model)
+    paths = model_paths(Path(root), ref, host=host)
+    try:
+        paths.manifest.unlink()
+    except FileNotFoundError as error:
+        raise KeyError(model) from error
+
+    current = paths.manifest.parent
+    manifests_root = Path(root) / "manifests" / host
+    while current != manifests_root and manifests_root in current.parents:
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        current = current.parent
+
+
 def manifest_digests(manifest: dict[str, Any]) -> list[str]:
     digests = [manifest["config"]["digest"]]
     digests.extend(layer["digest"] for layer in manifest.get("layers", []))

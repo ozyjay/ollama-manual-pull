@@ -65,6 +65,14 @@ class AppRequestHandler(BaseHTTPRequestHandler):
                 self.server.queue.pause_after_current()
                 self._send_json(self.server.queue.snapshot())
                 return
+            if path == "/api/installed/remove":
+                payload = self._read_json_body()
+                model = payload.get("model")
+                if not isinstance(model, str) or not model.strip():
+                    raise ValueError("Expected non-empty model")
+                self.server.queue.delete_installed_model(model)
+                self._send_json({"ok": True})
+                return
             if path.startswith("/api/retry/"):
                 item_id = unquote(path.removeprefix("/api/retry/"))
                 self._send_json(self.server.queue.retry(item_id))
