@@ -372,6 +372,49 @@ class DownloadQueueTests(unittest.TestCase):
         self.assertEqual(retried["status"], "waiting")
         self.assertIsNone(retried["error"])
 
+    def test_add_returns_existing_waiting_item_for_duplicate_model(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = DownloadQueue(models_dir=Path(tmp), pull_func=lambda *args, **kwargs: None)
+
+            first = queue.add("qwen3-coder:30b")
+            second = queue.add("qwen3-coder:30b")
+            snapshot = queue.snapshot()
+
+        self.assertEqual(first["id"], second["id"])
+        self.assertTrue(second["deduplicated"])
+        self.assertEqual(len(snapshot["items"]), 1)
+
+    def test_add_deduplicates_implicit_latest_tag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = DownloadQueue(models_dir=Path(tmp), pull_func=lambda *args, **kwargs: None)
+
+            first = queue.add("qwen3-coder")
+            second = queue.add("qwen3-coder:latest")
+            snapshot = queue.snapshot()
+
+        self.assertEqual(first["id"], second["id"])
+        self.assertEqual(first["canonical_model"], "qwen3-coder:latest")
+        self.assertTrue(second["deduplicated"])
+        self.assertEqual(len(snapshot["items"]), 1)
+
+    def test_add_returns_failed_duplicate_without_adding_row(self):
+        def fake_pull(model, **kwargs):
+            raise RuntimeError("download broke")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = DownloadQueue(models_dir=Path(tmp), pull_func=fake_pull)
+            first = queue.add("broken:latest")
+            queue.start()
+            self.assertTrue(queue.wait_until_idle(2))
+
+            second = queue.add("broken")
+            snapshot = queue.snapshot()
+
+        self.assertEqual(first["id"], second["id"])
+        self.assertEqual(second["status"], "failed")
+        self.assertTrue(second["deduplicated"])
+        self.assertEqual(len(snapshot["items"]), 1)
+
     def test_pause_after_current_stops_before_next_item(self):
         first_started = threading.Event()
         release_first = threading.Event()

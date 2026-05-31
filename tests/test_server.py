@@ -67,6 +67,30 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(payload["model"], "qwen3-coder:30b")
         self.assertEqual(payload["status"], "waiting")
 
+    def test_queue_route_reports_deduplicated_item(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base_url = self.start_server(tmp)
+
+            first_status, first = self.request_json(
+                f"{base_url}/api/queue",
+                method="POST",
+                body={"model": "qwen3-coder"},
+            )
+            second_status, second = self.request_json(
+                f"{base_url}/api/queue",
+                method="POST",
+                body={"model": "qwen3-coder:latest"},
+            )
+            state_status, state = self.request_json(f"{base_url}/api/state")
+
+        self.assertEqual(first_status, 200)
+        self.assertEqual(second_status, 200)
+        self.assertEqual(state_status, 200)
+        self.assertEqual(first["id"], second["id"])
+        self.assertTrue(second["deduplicated"])
+        self.assertEqual(second["canonical_model"], "qwen3-coder:latest")
+        self.assertEqual(len(state["items"]), 1)
+
     def test_search_endpoint_url_decodes_query(self):
         with tempfile.TemporaryDirectory() as tmp:
             base_url = self.start_server(tmp)

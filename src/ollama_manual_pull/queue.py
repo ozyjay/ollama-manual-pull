@@ -12,6 +12,12 @@ from .core import DEFAULT_REGISTRY, installed_models, parse_model_ref, pull_mode
 PullFunc = Callable[..., None]
 
 
+def canonical_model_ref(model: str) -> str:
+    ref = parse_model_ref(model)
+    name = f"{ref.name}:{ref.tag}"
+    return name if ref.namespace == "library" else f"{ref.namespace}/{name}"
+
+
 def _empty_progress() -> dict[str, Any]:
     return {
         "phase": "waiting",
@@ -40,22 +46,31 @@ class DownloadQueue:
         self._pause_requested = False
 
     def add(self, model: str) -> dict[str, Any]:
-        parse_model_ref(model)
+        canonical = canonical_model_ref(model)
         now = time.time()
-        item = {
-            "id": str(next(self._ids)),
-            "model": model,
-            "status": "waiting",
-            "error": None,
-            "current_blob": None,
-            "messages": [],
-            "progress": _empty_progress(),
-            "_planned_files": {},
-            "_completed_files": {},
-            "created_at": now,
-            "updated_at": now,
-        }
         with self._condition:
+            for existing in self._items:
+                if existing.get("canonical_model") != canonical:
+                    continue
+                if existing["status"] in {"waiting", "running", "completed", "failed"}:
+                    copied = self._copy_item(existing)
+                    copied["deduplicated"] = True
+                    return copied
+            item = {
+                "id": str(next(self._ids)),
+                "model": model,
+                "canonical_model": canonical,
+                "deduplicated": False,
+                "status": "waiting",
+                "error": None,
+                "current_blob": None,
+                "messages": [],
+                "progress": _empty_progress(),
+                "_planned_files": {},
+                "_completed_files": {},
+                "created_at": now,
+                "updated_at": now,
+            }
             self._items.append(item)
             self._condition.notify_all()
             return self._copy_item(item)
