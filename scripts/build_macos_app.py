@@ -14,7 +14,7 @@ from pathlib import Path
 
 APP_NAME = "Ollama Manual Pull"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-NATIVE_APP_TEMPLATE = PROJECT_ROOT / "scripts" / "macos_native_app.swift"
+NATIVE_APP_SOURCE_DIR = PROJECT_ROOT / "macos" / "OllamaManualPull"
 
 
 def build_app(
@@ -38,9 +38,9 @@ def build_app(
 
     _write_app_icon(resources)
     _write_info_plist(contents / "Info.plist")
-    native_source = resources / "NativeApp.swift"
-    _write_native_source(native_source, python_executable)
-    _compile_native_app(native_source, macos / APP_NAME)
+    native_source_dir = resources / "macos" / "OllamaManualPull"
+    _write_native_sources(native_source_dir, python_executable)
+    _compile_native_app(sorted(native_source_dir.glob("*.swift")), macos / APP_NAME)
     return app_path
 
 
@@ -259,22 +259,23 @@ def _over(bottom: tuple[int, int, int, int], top: tuple[int, int, int, int]) -> 
     return tuple(channels)
 
 
-def _write_native_source(path: Path, python_executable: Path) -> None:
-    source = NATIVE_APP_TEMPLATE.read_text()
-    source = source.replace("%%PYTHON_EXECUTABLE%%", _swift_string_literal(python_executable))
-    path.write_text(source)
+def _write_native_sources(destination: Path, python_executable: Path) -> None:
+    shutil.copytree(NATIVE_APP_SOURCE_DIR, destination, ignore=shutil.ignore_patterns("*.in"))
+    template = (NATIVE_APP_SOURCE_DIR / "AppConfig.swift.in").read_text()
+    rendered = template.replace("%%PYTHON_EXECUTABLE%%", _swift_string_literal(python_executable))
+    (destination / "AppConfig.swift").write_text(rendered)
 
 
 def _swift_string_literal(value: Path) -> str:
     return json.dumps(str(value))
 
 
-def _compile_native_app(source: Path, executable: Path) -> None:
+def _compile_native_app(sources: list[Path], executable: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="ollama-manual-pull-swift-cache-") as module_cache:
         subprocess.run(
             [
                 "swiftc",
-                str(source),
+                *[str(source) for source in sources],
                 "-o",
                 str(executable),
                 "-parse-as-library",
