@@ -58,9 +58,6 @@ struct APIClient {
             }
             throw APIError(message: "Request failed with HTTP \(http.statusCode).")
         }
-        if let payload = try? JSONDecoder().decode(APIErrorBody.self, from: data), let message = payload.error {
-            throw APIError(message: message)
-        }
         return try JSONDecoder().decode(T.self, from: data)
     }
 

@@ -1,11 +1,15 @@
 import SwiftUI
 
 enum AppFormatters {
-    static func date(_ seconds: Double) -> String {
+    private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .medium
-        return formatter.string(from: Date(timeIntervalSince1970: seconds))
+        return formatter
+    }()
+
+    static func date(_ seconds: Double) -> String {
+        dateFormatter.string(from: Date(timeIntervalSince1970: seconds))
     }
 
     static func bytes(_ value: Double?) -> String {

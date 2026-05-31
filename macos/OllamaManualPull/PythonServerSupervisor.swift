@@ -5,14 +5,22 @@ import Foundation
 final class PythonServerSupervisor: ObservableObject {
     private var serverTask: Process?
     private var outputBuffer = ""
+    private var didEmitServerURL = false
     var onURL: ((URL) -> Void)?
     var onStartupError: ((String) -> Void)?
 
     func start() {
+        if let task = serverTask, task.isRunning {
+            return
+        }
+        if serverTask != nil {
+            cleanupServerTask(terminate: false)
+        }
         guard let resourcesURL = Bundle.main.resourceURL else {
             onStartupError?("Could not locate bundled app resources.")
             return
         }
+        resetProcessState()
         let task = Process()
         let output = Pipe()
         let errorOutput = Pipe()
@@ -24,6 +32,12 @@ final class PythonServerSupervisor: ObservableObject {
         ]
         task.standardOutput = output
         task.standardError = errorOutput
+        task.terminationHandler = { [weak self, weak task] _ in
+            DispatchQueue.main.async {
+                guard let self, let task else { return }
+                self.cleanupFinishedTask(task)
+            }
+        }
         output.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
@@ -38,22 +52,51 @@ final class PythonServerSupervisor: ObservableObject {
             try task.run()
             serverTask = task
         } catch {
+            resetProcessState()
             onStartupError?("Could not start the local app server: \(error.localizedDescription)")
         }
     }
 
     func stop() {
-        if let output = serverTask?.standardOutput as? Pipe {
+        cleanupServerTask(terminate: true)
+    }
+
+    private func cleanupServerTask(terminate: Bool) {
+        guard let task = serverTask else {
+            resetProcessState()
+            return
+        }
+        clearReadabilityHandlers(for: task)
+        if terminate, task.isRunning {
+            task.terminate()
+        }
+        serverTask = nil
+        resetProcessState()
+    }
+
+    private func cleanupFinishedTask(_ task: Process) {
+        guard serverTask === task else { return }
+        clearReadabilityHandlers(for: task)
+        serverTask = nil
+        resetProcessState()
+    }
+
+    private func clearReadabilityHandlers(for task: Process) {
+        if let output = task.standardOutput as? Pipe {
             output.fileHandleForReading.readabilityHandler = nil
         }
-        if let error = serverTask?.standardError as? Pipe {
+        if let error = task.standardError as? Pipe {
             error.fileHandleForReading.readabilityHandler = nil
         }
-        serverTask?.terminate()
-        serverTask = nil
+    }
+
+    private func resetProcessState() {
+        outputBuffer = ""
+        didEmitServerURL = false
     }
 
     private func appendServerOutput(_ chunk: String) {
+        guard !didEmitServerURL else { return }
         outputBuffer += chunk
         guard let prefix = outputBuffer.range(of: "URL=") else { return }
         let tail = outputBuffer[prefix.upperBound...]
@@ -63,6 +106,7 @@ final class PythonServerSupervisor: ObservableObject {
             onStartupError?("The local server returned an invalid URL: \(urlString)")
             return
         }
+        didEmitServerURL = true
         onURL?(url)
     }
 
