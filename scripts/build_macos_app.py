@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import plistlib
+import shlex
 import shutil
 import struct
 import subprocess
@@ -54,6 +55,31 @@ def install_app(
     if destination.exists():
         shutil.rmtree(destination)
     shutil.copytree(app_path, destination)
+    return destination
+
+
+def install_app_with_admin_prompt(
+    app_path: Path,
+    *,
+    applications_dir: Path = Path("/Applications"),
+) -> Path:
+    destination = applications_dir / app_path.name
+    command = " && ".join(
+        [
+            f"/bin/mkdir -p {shlex.quote(str(applications_dir))}",
+            f"/bin/rm -rf {shlex.quote(str(destination))}",
+            f"/bin/cp -R {shlex.quote(str(app_path))} {shlex.quote(str(destination))}",
+            f"/usr/bin/touch {shlex.quote(str(destination))}",
+        ]
+    )
+    subprocess.run(
+        [
+            "osascript",
+            "-e",
+            f"do shell script {json.dumps(command)} with administrator privileges",
+        ],
+        check=True,
+    )
     return destination
 
 
@@ -309,10 +335,13 @@ def main(argv: list[str] | None = None) -> int:
         try:
             installed = install_app(app_path, applications_dir=args.applications_dir)
         except PermissionError as error:
-            raise SystemExit(
-                f"Permission denied installing to {args.applications_dir}. "
-                "Try Finder drag-and-drop or rerun with appropriate permissions."
-            ) from error
+            print(f"Permission denied installing to {args.applications_dir}; requesting administrator approval...")
+            try:
+                installed = install_app_with_admin_prompt(app_path, applications_dir=args.applications_dir)
+            except subprocess.CalledProcessError as admin_error:
+                raise SystemExit(
+                    f"Administrator install failed or was cancelled for {args.applications_dir}."
+                ) from admin_error
         print(f"Installed: {installed}")
     return 0
 

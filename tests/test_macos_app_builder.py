@@ -3,6 +3,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from scripts import build_macos_app
 
@@ -155,6 +156,25 @@ class MacOSAppBuilderTests(unittest.TestCase):
             self.assertTrue((installed / "Contents" / "Resources" / "AppIcon.icns").is_file())
             self.assertTrue((installed / "Contents" / "MacOS" / "Ollama Manual Pull").is_file())
             self.assertFalse((installed / "stale.txt").exists())
+
+    def test_main_prompts_for_admin_install_when_applications_copy_is_denied(self):
+        app_path = Path("/tmp/Ollama Manual Pull.app")
+        installed_path = Path("/Applications/Ollama Manual Pull.app")
+
+        with mock.patch.object(build_macos_app, "build_app", return_value=app_path), \
+            mock.patch.object(build_macos_app, "install_app", side_effect=PermissionError("denied")), \
+            mock.patch.object(
+                build_macos_app,
+                "install_app_with_admin_prompt",
+                return_value=installed_path,
+            ) as install_with_admin:
+            result = build_macos_app.main(["--install"])
+
+        self.assertEqual(result, 0)
+        install_with_admin.assert_called_once_with(
+            app_path,
+            applications_dir=Path("/Applications"),
+        )
 
 
 if __name__ == "__main__":
