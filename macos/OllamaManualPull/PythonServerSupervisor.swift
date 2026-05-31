@@ -6,6 +6,7 @@ final class PythonServerSupervisor: ObservableObject {
     private var serverTask: Process?
     private var outputBuffer = ""
     private var didEmitServerURL = false
+    private var processGeneration = 0
     var onURL: ((URL) -> Void)?
     var onStartupError: ((String) -> Void)?
 
@@ -21,6 +22,7 @@ final class PythonServerSupervisor: ObservableObject {
             return
         }
         resetProcessState()
+        let generation = processGeneration
         let task = Process()
         let output = Pipe()
         let errorOutput = Pipe()
@@ -35,18 +37,18 @@ final class PythonServerSupervisor: ObservableObject {
         task.terminationHandler = { [weak self, weak task] _ in
             DispatchQueue.main.async {
                 guard let self, let task else { return }
-                self.cleanupFinishedTask(task)
+                self.cleanupFinishedTask(task, generation: generation)
             }
         }
         output.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
-            DispatchQueue.main.async { self?.appendServerOutput(chunk) }
+            DispatchQueue.main.async { self?.appendServerOutput(chunk, generation: generation) }
         }
         errorOutput.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
-            DispatchQueue.main.async { self?.onStartupError?(chunk.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            DispatchQueue.main.async { self?.appendServerError(chunk, generation: generation) }
         }
         do {
             try task.run()
@@ -74,7 +76,8 @@ final class PythonServerSupervisor: ObservableObject {
         resetProcessState()
     }
 
-    private func cleanupFinishedTask(_ task: Process) {
+    private func cleanupFinishedTask(_ task: Process, generation: Int) {
+        guard generation == processGeneration else { return }
         guard serverTask === task else { return }
         clearReadabilityHandlers(for: task)
         serverTask = nil
@@ -91,11 +94,13 @@ final class PythonServerSupervisor: ObservableObject {
     }
 
     private func resetProcessState() {
+        processGeneration += 1
         outputBuffer = ""
         didEmitServerURL = false
     }
 
-    private func appendServerOutput(_ chunk: String) {
+    private func appendServerOutput(_ chunk: String, generation: Int) {
+        guard generation == processGeneration else { return }
         guard !didEmitServerURL else { return }
         outputBuffer += chunk
         guard let prefix = outputBuffer.range(of: "URL=") else { return }
@@ -108,6 +113,11 @@ final class PythonServerSupervisor: ObservableObject {
         }
         didEmitServerURL = true
         onURL?(url)
+    }
+
+    private func appendServerError(_ chunk: String, generation: Int) {
+        guard generation == processGeneration else { return }
+        onStartupError?(chunk.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     private func resolvedPython() -> String {
