@@ -1,4 +1,5 @@
 import plistlib
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -42,7 +43,7 @@ class MacOSAppBuilderTests(unittest.TestCase):
             self.assertEqual(plist["CFBundleExecutable"], "Ollama Manual Pull")
             self.assertEqual(plist["CFBundleIconFile"], "AppIcon")
 
-            combined_source = "\n".join(path.read_text() for path in sorted(source_dir.glob("*.swift")))
+            combined_source = "\n".join(path.read_text() for path in sorted(source_dir.rglob("*.swift")))
             self.assertIn("/Users/example/.pyenv/versions/3.12.13/bin/python3", combined_source)
             self.assertIn("@main", combined_source)
             self.assertIn("CommandGroup", combined_source)
@@ -58,6 +59,41 @@ class MacOSAppBuilderTests(unittest.TestCase):
             self.assertNotIn("WebKit", combined_source)
             self.assertNotIn("webbrowser", combined_source)
             self.assertNotIn("run_web", combined_source)
+
+    def test_build_app_compiles_nested_swift_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_root = root / "OllamaManualPull"
+            output_dir = root / "dist"
+            shutil.copytree(build_macos_app.NATIVE_APP_SOURCE_DIR, source_root)
+            nested_dir = source_root / "Support"
+            nested_dir.mkdir()
+            (nested_dir / "NestedCompileCheck.swift").write_text(
+                'enum NestedCompileCheck { static let value = "nested" }\n'
+            )
+            with (source_root / "ContentView.swift").open("a") as source:
+                source.write("\nprivate let nestedCompileCheck = NestedCompileCheck.value\n")
+
+            original_source_dir = build_macos_app.NATIVE_APP_SOURCE_DIR
+            build_macos_app.NATIVE_APP_SOURCE_DIR = source_root
+            try:
+                app_path = build_macos_app.build_app(
+                    output_dir=output_dir,
+                    python_executable=Path("/Users/example/.pyenv/versions/3.12.13/bin/python3"),
+                )
+            finally:
+                build_macos_app.NATIVE_APP_SOURCE_DIR = original_source_dir
+
+            bundled_nested_source = (
+                app_path
+                / "Contents"
+                / "Resources"
+                / "macos"
+                / "OllamaManualPull"
+                / "Support"
+                / "NestedCompileCheck.swift"
+            )
+            self.assertTrue(bundled_nested_source.is_file())
 
     def test_install_app_copies_bundle_to_applications_directory(self):
         with tempfile.TemporaryDirectory() as tmp:

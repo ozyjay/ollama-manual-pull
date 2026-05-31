@@ -40,7 +40,7 @@ def build_app(
     _write_info_plist(contents / "Info.plist")
     native_source_dir = resources / "macos" / "OllamaManualPull"
     _write_native_sources(native_source_dir, python_executable)
-    _compile_native_app(sorted(native_source_dir.glob("*.swift")), macos / APP_NAME)
+    _compile_native_app(sorted(native_source_dir.rglob("*.swift")), macos / APP_NAME)
     return app_path
 
 
