@@ -2,21 +2,21 @@
 
 ## Context
 
-`ollama-manual-pull` now has a native macOS window, but the app is still packaged from one generated Swift file that talks to a local Python HTTP server. The Python downloader already handles the safety-critical behavior: resumable downloads, SHA-256 verification, blob reuse, and manifest installation after all referenced blobs verify.
+`ollama-manual-pull` now has a native multi-file SwiftUI macOS app that talks to a local Python HTTP server. The Python downloader continues to handle the safety-critical behavior: resumable downloads, SHA-256 verification, blob reuse, and manifest installation after all referenced blobs verify.
 
-The current user experience has several sharp edges:
+This migration was driven by several sharp edges in the previous generated native app:
 
-- Standard macOS commands such as `Command-Q` are not available.
-- The visible UI refreshes every second and appears to clear or rebuild itself.
-- Start and pause controls can scroll out of reach while downloads are active.
-- The same download can appear multiple times in the queue.
-- The single Swift file mixes process startup, networking, state management, and all views.
+- Standard macOS commands such as `Command-Q` were not available.
+- The visible UI refreshed every second and appeared to clear or rebuild itself.
+- Start and pause controls could scroll out of reach while downloads were active.
+- The same download could appear multiple times in the queue.
+- The generated Swift template mixed process startup, networking, state management, and all views.
 
 The selected direction is a proper SwiftUI macOS app that keeps Python as the downloader engine.
 
 ## Goals
 
-- Replace the one-file Swift app with a small, maintainable SwiftUI app structure.
+- Keep the native app in a small, maintainable SwiftUI app structure.
 - Keep the Python downloader and local queue API as the engine for this migration.
 - Make the queue UI stable while state refreshes.
 - Ensure pause and start actions are always reachable.
@@ -72,7 +72,7 @@ The macOS app should be split into focused Swift files under `macos/OllamaManual
 - `InstalledModelsView.swift`: installed model list.
 - `Formatters.swift`: byte, ETA, date, and status formatting.
 
-The build script can continue to generate a macOS `.app`, but it should compile multiple Swift source files instead of writing all native code into `Contents/Resources/NativeApp.swift`.
+The build script continues to generate a macOS `.app`, but now compiles multiple Swift source files instead of writing all native code into a generated resource Swift file.
 
 Python remains packaged in app resources as it is today:
 

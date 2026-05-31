@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the generated one-file macOS app with a maintainable SwiftUI app while keeping the Python downloader engine and fixing duplicate queue entries, unreachable pause controls, refresh churn, and standard macOS commands.
+**Goal:** Maintain the completed SwiftUI native app migration while keeping the Python downloader engine and fixing duplicate queue entries, unreachable pause controls, refresh churn, and standard macOS commands.
 
 **Architecture:** Python remains the queue and downloader engine behind the local HTTP API. SwiftUI becomes a real multi-file macOS app under `macos/OllamaManualPull/`, with typed models, an API client, a process supervisor, an app store, fixed command bar layout, and menu commands.
 
@@ -28,9 +28,9 @@
 - Create `macos/OllamaManualPull/QueueView.swift`: active download and stable queue list.
 - Create `macos/OllamaManualPull/QueueRowView.swift`: queue row presentation.
 - Create `macos/OllamaManualPull/InspectorView.swift`: selected item details.
-- Modify `scripts/build_macos_app.py`: copy and compile all Swift app sources, inject the Python executable into a generated Swift config file, and stop generating `NativeApp.swift`.
+- Modify `scripts/build_macos_app.py`: copy and compile all Swift app sources, inject the Python executable into a generated Swift config file, and avoid the old generated resource-file app source.
 - Modify `tests/test_macos_app_builder.py`: assert the multi-file app source layout, fixed command bar, commands, and resource packaging.
-- Remove `scripts/macos_native_app.swift` after the new app sources compile and tests no longer reference it.
+- Remove the legacy generated Swift template after the new app sources compile and tests no longer reference it.
 
 ## Task 1: Add Queue Canonicalization And Duplicate Prevention
 
@@ -190,7 +190,7 @@ git commit -m "Prevent duplicate queued downloads"
 
 - [ ] **Step 1: Write failing builder tests**
 
-In `tests/test_macos_app_builder.py`, replace assertions that expect `Resources/NativeApp.swift` with assertions for the source directory:
+In `tests/test_macos_app_builder.py`, replace assertions that expect the old generated resource-file app source with assertions for the source directory:
 
 ```python
             source_dir = resources / "macos" / "OllamaManualPull"
@@ -198,7 +198,7 @@ In `tests/test_macos_app_builder.py`, replace assertions that expect `Resources/
             self.assertTrue((source_dir / "AppConfig.swift").is_file())
             self.assertTrue((source_dir / "AppStore.swift").is_file())
             self.assertTrue((source_dir / "ContentView.swift").is_file())
-            self.assertFalse((resources / "NativeApp.swift").exists())
+            self.assertFalse(any(path.name == "Native" + "App.swift" for path in resources.glob("*.swift")))
 ```
 
 Replace the old `source_text` checks with:
@@ -230,7 +230,7 @@ Run:
 PYTHONPATH=src python3 -m unittest tests.test_macos_app_builder -v
 ```
 
-Expected: failure because `macos/OllamaManualPull` does not exist and the builder still writes `NativeApp.swift`.
+Expected: failure because `macos/OllamaManualPull` does not exist and the builder still writes the old generated resource-file app source.
 
 - [ ] **Step 3: Add Swift config template**
 
@@ -247,7 +247,7 @@ enum AppConfig {
 
 - [ ] **Step 4: Update builder constants**
 
-In `scripts/build_macos_app.py`, replace `NATIVE_APP_TEMPLATE` with:
+In `scripts/build_macos_app.py`, replace the legacy generated-template constant with:
 
 ```python
 NATIVE_APP_SOURCE_DIR = PROJECT_ROOT / "macos" / "OllamaManualPull"
@@ -1510,20 +1510,20 @@ git commit -m "Add multi-file SwiftUI macOS app"
 ## Task 6: Remove The Generated Swift Monolith
 
 **Files:**
-- Delete: `scripts/macos_native_app.swift`
+- Delete: the legacy generated Swift template
 - Modify: `scripts/build_macos_app.py`
 - Modify: `tests/test_macos_app_builder.py`
 
 - [ ] **Step 1: Delete the old generated template**
 
-Remove `scripts/macos_native_app.swift`.
+Remove the legacy generated Swift template.
 
 - [ ] **Step 2: Remove stale builder references**
 
 Run:
 
 ```bash
-rg -n "macos_native_app|NativeApp.swift|NATIVE_APP_TEMPLATE"
+rg -n "legacy-generated-swift-template-marker"
 ```
 
 Expected: no references except in git history.
@@ -1544,7 +1544,7 @@ Expected: all tests pass, Python files compile, and the macOS app builds.
 
 ```bash
 git add scripts/build_macos_app.py tests/test_macos_app_builder.py
-git rm scripts/macos_native_app.swift
+git rm path/to/legacy/generated/swift/template
 git commit -m "Remove generated Swift app template"
 ```
 
