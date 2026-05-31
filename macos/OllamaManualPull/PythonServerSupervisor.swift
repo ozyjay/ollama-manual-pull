@@ -28,10 +28,10 @@ final class PythonServerSupervisor: ObservableObject {
         let errorOutput = Pipe()
         task.executableURL = URL(fileURLWithPath: resolvedPython())
         task.arguments = ["-c", AppConfig.serverCommand]
-        task.environment = [
-            "PYTHONPATH": resourcesURL.appendingPathComponent("src").path,
-            "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-        ]
+        var environment = ProcessInfo.processInfo.environment
+        environment["PYTHONPATH"] = resourcesURL.appendingPathComponent("src").path
+        environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        task.environment = environment
         task.standardOutput = output
         task.standardError = errorOutput
         task.terminationHandler = { [weak self, weak task] _ in
@@ -117,6 +117,7 @@ final class PythonServerSupervisor: ObservableObject {
 
     private func appendServerError(_ chunk: String, generation: Int) {
         guard generation == processGeneration else { return }
+        guard !didEmitServerURL else { return }
         onStartupError?(chunk.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
