@@ -7,7 +7,7 @@ struct ContentView: View {
         VStack(spacing: 12) {
             Text("Ollama Manual Pull")
                 .font(.headline)
-            BottomCommandBar(isRefreshing: false) {
+            BottomCommandBar(isRefreshing: store.isRefreshing) {
                 Task {
                     await store.refreshState()
                 }

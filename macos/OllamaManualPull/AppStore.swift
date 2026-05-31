@@ -11,10 +11,11 @@ final class AppStore: ObservableObject {
     @Published var isSearching = false
     @Published var serverReady = false
     @Published var selectedSection: AppSection = .queue
+    @Published private(set) var isRefreshing = false
 
     private var apiClient: APIClient?
     private var refreshTask: Task<Void, Never>?
-    private var isRefreshing = false
+    private var refreshPending = false
 
     var selectedItem: QueueItem? {
         snapshot?.items.first { $0.id == selectedId }
@@ -56,16 +57,25 @@ final class AppStore: ObservableObject {
     }
 
     func refreshState() async {
-        guard let apiClient, !isRefreshing else { return }
+        guard apiClient != nil else { return }
+        if isRefreshing {
+            refreshPending = true
+            return
+        }
         isRefreshing = true
         defer { isRefreshing = false }
-        do {
-            let next = try await apiClient.state()
-            snapshot = next
-            reconcileSelection(with: next)
-        } catch {
-            appError = "State refresh failed: \(error.localizedDescription)"
-        }
+        repeat {
+            refreshPending = false
+            guard let apiClient else { break }
+            do {
+                let next = try await apiClient.state()
+                snapshot = next
+                reconcileSelection(with: next)
+                clearStateRefreshError()
+            } catch {
+                appError = "State refresh failed: \(error.localizedDescription)"
+            }
+        } while refreshPending
     }
 
     func search() async {
@@ -185,9 +195,19 @@ final class AppStore: ObservableObject {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                do {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch {
+                    break
+                }
                 await self?.refreshState()
             }
+        }
+    }
+
+    private func clearStateRefreshError() {
+        if appError?.hasPrefix("State refresh failed:") == true {
+            appError = nil
         }
     }
 
