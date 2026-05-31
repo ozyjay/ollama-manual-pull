@@ -66,6 +66,7 @@ final class AppStore: ObservableObject {
         defer { isRefreshing = false }
         repeat {
             refreshPending = false
+            guard !Task.isCancelled else { break }
             guard let apiClient else { break }
             do {
                 let next = try await apiClient.state()
@@ -73,9 +74,10 @@ final class AppStore: ObservableObject {
                 reconcileSelection(with: next)
                 clearStateRefreshError()
             } catch {
+                if isCancellation(error) || Task.isCancelled { break }
                 appError = "State refresh failed: \(error.localizedDescription)"
             }
-        } while refreshPending
+        } while refreshPending && !Task.isCancelled
     }
 
     func search() async {
@@ -209,6 +211,12 @@ final class AppStore: ObservableObject {
         if appError?.hasPrefix("State refresh failed:") == true {
             appError = nil
         }
+    }
+
+    private func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+        return false
     }
 
     private func reconcileSelection(with snapshot: AppSnapshot) {
