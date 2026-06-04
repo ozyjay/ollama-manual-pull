@@ -6,17 +6,35 @@ This is useful when `ollama pull` fails partway through a model download or exit
 
 ## Usage
 
-Run from the repo:
+This project requires Python 3.10 or newer.
+
+Install it in editable mode from the repo:
 
 ```bash
-PYTHONPATH=src python3 -m ollama_manual_pull qwen3-coder:30b
+python -m pip install -e .
+ollama-manual-pull qwen3-coder:30b
 ```
 
-Or install it in editable mode:
+On some macOS/Linux systems, use `python3` instead of `python`:
 
 ```bash
 python3 -m pip install -e .
 ollama-manual-pull qwen3-coder:30b
+```
+
+You can also run it without installing by setting `PYTHONPATH` to `src`.
+
+PowerShell:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m ollama_manual_pull qwen3-coder:30b
+```
+
+macOS/Linux shells:
+
+```bash
+PYTHONPATH=src python3 -m ollama_manual_pull qwen3-coder:30b
 ```
 
 The Ollama app/server does not need to be running while this tool downloads. After it finishes, start Ollama and check:
@@ -76,6 +94,17 @@ The app launches the same local web UI and opens it in your browser. The builder
 - The manifest is written only after all referenced blobs verify.
 
 ## Development
+
+PowerShell:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m unittest discover -s tests -v
+python -m py_compile src/ollama_manual_pull/*.py tests/*.py
+node --check src/ollama_manual_pull/web/app.js
+```
+
+macOS/Linux shells:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
