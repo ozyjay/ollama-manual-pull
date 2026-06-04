@@ -8,16 +8,57 @@ This is useful when `ollama pull` fails partway through a model download or exit
 
 This project requires Python 3.10 or newer.
 
-Install it in editable mode from the repo:
+## Cross-platform helper
+
+This repo includes one terminal helper that works on Windows with Python Install Manager (`pymanager`) and on macOS with `pyenv`.
+
+Windows PowerShell:
+
+```powershell
+python scripts/omp.py install
+python scripts/omp.py pull qwen3-coder:30b
+python scripts/omp.py web
+```
+
+macOS:
 
 ```bash
+pyenv local 3.12
+python scripts/omp.py install
+python scripts/omp.py pull qwen3-coder:30b
+python scripts/omp.py web
+```
+
+Use any Python 3.10+ version managed by `pyenv`; `3.12` is only an example.
+
+The helper also supports:
+
+```bash
+python scripts/omp.py test
+python scripts/omp.py --version-info
+```
+
+## Manual setup
+
+Install it in editable mode from the repo.
+
+Windows with Python Install Manager (`pymanager`):
+
+```powershell
 python -m pip install -e .
+python -m ollama_manual_pull qwen3-coder:30b
+```
+
+If `pip` warns that the generated scripts are not on `PATH`, the module form above still works. You can also add the printed `Scripts` directory to your user `PATH` and then run:
+
+```powershell
 ollama-manual-pull qwen3-coder:30b
 ```
 
-On some macOS/Linux systems, use `python3` instead of `python`:
+macOS with `pyenv`:
 
 ```bash
+pyenv local 3.12
 python3 -m pip install -e .
 ollama-manual-pull qwen3-coder:30b
 ```
@@ -66,6 +107,12 @@ By default, models are written to `$OLLAMA_MODELS` when set, otherwise `~/.ollam
 ## Web UI
 
 Launch the local browser UI:
+
+```powershell
+python scripts/omp.py web
+```
+
+Or, when the generated script is on `PATH`:
 
 ```bash
 ollama-manual-pull-web
