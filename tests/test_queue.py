@@ -2,6 +2,7 @@ import tempfile
 import threading
 import time
 import unittest
+import os
 from pathlib import Path
 from unittest import mock
 
@@ -369,8 +370,28 @@ class DownloadQueueTests(unittest.TestCase):
         self.assertEqual(attempts, ["broken"])
         self.assertEqual(failed["status"], "failed")
         self.assertEqual(failed["error"], "download broke")
+        self.assertIn("failed: download broke", failed["messages"])
         self.assertEqual(retried["status"], "waiting")
         self.assertIsNone(retried["error"])
+
+    def test_worker_failures_are_written_to_log_file(self):
+        def fake_pull(model, **kwargs):
+            raise RuntimeError("HTTP 400 Bad Request: invalid range")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "app.log"
+            with mock.patch.dict(os.environ, {"OLLAMA_MANUAL_PULL_LOG_FILE": str(log_path)}):
+                queue = DownloadQueue(models_dir=Path(tmp) / "models", pull_func=fake_pull)
+                queue.add("qwen3-coder:30b")
+
+                queue.start()
+                self.assertTrue(queue.wait_until_idle(2))
+
+            log_text = log_path.read_text()
+
+        self.assertIn("qwen3-coder:30b", log_text)
+        self.assertIn("HTTP 400 Bad Request: invalid range", log_text)
+        self.assertIn("download failed", log_text)
 
     def test_add_returns_existing_waiting_item_for_duplicate_model(self):
         with tempfile.TemporaryDirectory() as tmp:

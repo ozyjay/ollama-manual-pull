@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from .app_logging import write_log
 from .core import DEFAULT_REGISTRY, delete_installed_model, installed_models, parse_model_ref, pull_model
 
 
@@ -180,9 +181,11 @@ class DownloadQueue:
                         progress=lambda event, item_id=item["id"]: self._record_progress(item_id, event),
                     )
                 except Exception as error:
+                    write_log("download failed", model=item["model"], error=error)
                     with self._condition:
                         item["status"] = "failed"
                         item["error"] = str(error)
+                        item["messages"].append(f"failed: {error}")
                         item["progress"]["phase"] = "failed"
                         item["updated_at"] = time.time()
                         self._condition.notify_all()

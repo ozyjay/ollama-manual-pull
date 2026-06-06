@@ -55,6 +55,16 @@ ollama-manual-pull-web
 
 The web UI runs on `127.0.0.1`, queues one model download at a time, and preserves the same safety behavior as the CLI downloader. Search is best effort; direct model references such as `qwen3-coder:30b` always remain supported.
 
+## Logs
+
+The CLI, web UI, and macOS app write diagnostic logs to:
+
+```text
+~/Library/Logs/Ollama Manual Pull/app.log
+```
+
+Set `OLLAMA_MANUAL_PULL_LOG_FILE=/path/to/app.log` to use a different log file.
+
 ## macOS App
 
 Build a native local `.app` bundle:

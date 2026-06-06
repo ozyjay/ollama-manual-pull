@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import io
 import json
@@ -35,9 +36,93 @@ class OllamaManualPullTests(unittest.TestCase):
             io.BytesIO(b"this model requires macOS"),
         )
 
-        with mock.patch("ollama_manual_pull.core.urllib.request.urlopen", side_effect=error):
+        with mock.patch("ollama_manual_pull.core.registry_urlopen", side_effect=error):
             with self.assertRaisesRegex(RuntimeError, "HTTP 412.*this model requires macOS"):
                 core.fetch_json(error.url, retries=0)
+
+    def test_download_blob_includes_plain_text_http_error_body(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ref = omp.parse_model_ref("qwen3-coder:30b")
+            paths = omp.model_paths(Path(tmp), ref)
+            digest = "sha256:" + "a" * 64
+            error = urllib.error.HTTPError(
+                f"https://registry.ollama.ai/v2/library/qwen3-coder/blobs/{digest}",
+                400,
+                "Bad Request",
+                {},
+                io.BytesIO(b"invalid range"),
+            )
+
+            with mock.patch.object(core, "registry_urlopen", side_effect=error):
+                with self.assertRaisesRegex(RuntimeError, "HTTP 400 Bad Request: invalid range"):
+                    omp.download_blob(
+                        registry=omp.DEFAULT_REGISTRY,
+                        ref=ref,
+                        paths=paths,
+                        digest=digest,
+                        retries=0,
+                        dry_run=False,
+                    )
+
+    def test_registry_request_adds_ollama_user_agent_and_auth_token(self):
+        seed = b"\x01" * 32
+        public_key = core.ed25519_public_key(seed)
+
+        with (
+            mock.patch("ollama_manual_pull.core.default_ollama_identity", return_value=(seed, public_key)),
+            mock.patch("ollama_manual_pull.core.time.time", return_value=1_700_000_000),
+            mock.patch("ollama_manual_pull.core.platform.machine", return_value="arm64"),
+            mock.patch("ollama_manual_pull.core.sys.platform", "darwin"),
+        ):
+            request = core.registry_request("https://registry.ollama.ai/v2/library/qwen3.6/manifests/27b")
+
+        self.assertEqual(
+            request.get_header("User-agent"),
+            f"ollama/v0.0.0 (arm64 darwin) Python/{core.platform.python_version()}",
+        )
+        auth = request.get_header("Authorization")
+        self.assertIsNotNone(auth)
+        self.assertTrue(auth.startswith("Bearer "))
+        check_url, public_blob, signature = auth.removeprefix("Bearer ").split(":")
+        self.assertEqual(base64.b64decode(check_url), b"https://ollama.com?ts=1700000000")
+        self.assertEqual(base64.b64decode(public_blob), core.ssh_string(b"ssh-ed25519") + core.ssh_string(public_key))
+        self.assertEqual(len(base64.b64decode(signature)), 64)
+
+    def test_registry_redirect_strips_auth_when_host_changes(self):
+        request = urllib.request.Request("https://registry.ollama.ai/v2/library/gemma4/blobs/sha256:abc")
+        request.add_header("Authorization", "Bearer registry-token")
+        request.add_header("User-Agent", "ollama/v0.0.0 (arm64 darwin) Python/3")
+
+        handler = core.RegistryRedirectHandler()
+        redirected = handler.redirect_request(
+            request,
+            None,
+            302,
+            "Found",
+            {},
+            "https://objects.example.test/blob?X-Amz-Signature=signed",
+        )
+
+        self.assertIsNotNone(redirected)
+        self.assertIsNone(redirected.get_header("Authorization"))
+        self.assertEqual(redirected.get_header("User-agent"), "ollama/v0.0.0 (arm64 darwin) Python/3")
+
+    def test_registry_redirect_keeps_auth_when_host_matches(self):
+        request = urllib.request.Request("https://registry.ollama.ai/v2/library/gemma4/blobs/sha256:abc")
+        request.add_header("Authorization", "Bearer registry-token")
+
+        handler = core.RegistryRedirectHandler()
+        redirected = handler.redirect_request(
+            request,
+            None,
+            302,
+            "Found",
+            {},
+            "https://registry.ollama.ai/v2/library/gemma4/blobs/sha256:def",
+        )
+
+        self.assertIsNotNone(redirected)
+        self.assertEqual(redirected.get_header("Authorization"), "Bearer registry-token")
 
     def test_model_paths_match_ollama_layout(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -160,7 +245,7 @@ class OllamaManualPullTests(unittest.TestCase):
                 requests.append(request)
                 return FakeResponse(b"def")
 
-            with mock.patch.object(core.urllib.request, "urlopen", side_effect=fake_urlopen):
+            with mock.patch.object(core, "registry_urlopen", side_effect=fake_urlopen):
                 omp.download_blob(
                     registry="https://registry.ollama.ai",
                     ref=omp.parse_model_ref("qwen3-coder:30b"),
@@ -195,7 +280,7 @@ class OllamaManualPullTests(unittest.TestCase):
                 requests.append(request)
                 return FakeResponse(b"def")
 
-            with mock.patch.object(core.urllib.request, "urlopen", side_effect=fake_urlopen):
+            with mock.patch.object(core, "registry_urlopen", side_effect=fake_urlopen):
                 omp.download_blob(
                     registry="https://registry.ollama.ai",
                     ref=omp.parse_model_ref("qwen3-coder:30b"),
@@ -234,7 +319,7 @@ class OllamaManualPullTests(unittest.TestCase):
                 requests.append(request)
                 return FakeResponse(b"def")
 
-            with mock.patch.object(core.urllib.request, "urlopen", side_effect=fake_urlopen):
+            with mock.patch.object(core, "registry_urlopen", side_effect=fake_urlopen):
                 omp.download_blob(
                     registry="https://registry.ollama.ai",
                     ref=omp.parse_model_ref("qwen3-coder:30b"),
@@ -300,7 +385,7 @@ class OllamaManualPullTests(unittest.TestCase):
                     self.close()
 
             with (
-                mock.patch.object(core.urllib.request, "urlopen", return_value=FakeResponse(b"abcdef")),
+                mock.patch.object(core, "registry_urlopen", return_value=FakeResponse(b"abcdef")),
                 mock.patch.object(core.time, "monotonic", side_effect=[0.0, 0.6, 0.8]),
             ):
                 omp.download_blob(

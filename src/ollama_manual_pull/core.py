@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import dataclasses
+import functools
 import hashlib
 import json
 import os
+import platform
 import shutil
+import struct
 import sys
 import time
 import urllib.error
@@ -14,10 +18,19 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable
 
+from .app_logging import write_log
+
 
 DEFAULT_REGISTRY = "https://registry.ollama.ai"
 DEFAULT_HOST = "registry.ollama.ai"
 ProgressCallback = Callable[[dict[str, Any]], None]
+ED25519_P = 2**255 - 19
+ED25519_Q = 2**252 + 27742317777372353535851937790883648493
+ED25519_D = -121665 * pow(121666, ED25519_P - 2, ED25519_P) % ED25519_P
+ED25519_B = (
+    15112221349535400772501151409588531511454012693041857206046113283949847762202,
+    46316835694926478169428394003475163141307993866256225615783033603165251855960,
+)
 
 
 class ProgressCallbackError(Exception):
@@ -171,25 +184,200 @@ def emit_progress(progress: ProgressCallback | None, event: dict[str, Any]) -> N
             raise ProgressCallbackError("Progress callback failed") from error
 
 
+def registry_request(url: str) -> urllib.request.Request:
+    request = urllib.request.Request(url)
+    request.add_header("User-Agent", ollama_user_agent())
+    identity = default_ollama_identity()
+    if identity is not None:
+        seed, public_key = identity
+        request.add_header("Authorization", "Bearer " + ollama_auth_token(seed, public_key))
+    return request
+
+
+class RegistryRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is None:
+            return None
+        original_host = urllib.parse.urlparse(req.full_url).netloc
+        redirected_host = urllib.parse.urlparse(newurl).netloc
+        if original_host != redirected_host:
+            redirected.remove_header("Authorization")
+        return redirected
+
+
+def registry_urlopen(request: urllib.request.Request, *, timeout: int) -> Any:
+    opener = urllib.request.build_opener(RegistryRedirectHandler())
+    return opener.open(request, timeout=timeout)
+
+
+def ollama_user_agent() -> str:
+    arch = platform.machine().lower()
+    arch = {"aarch64": "arm64", "x86_64": "amd64"}.get(arch, arch)
+    os_name = "darwin" if sys.platform == "darwin" else sys.platform.split("-", 1)[0].lower()
+    return f"ollama/v0.0.0 ({arch} {os_name}) Python/{platform.python_version()}"
+
+
+@functools.cache
+def default_ollama_identity() -> tuple[bytes, bytes] | None:
+    path = Path.home() / ".ollama" / "id_ed25519"
+    try:
+        return load_openssh_ed25519_identity(path)
+    except FileNotFoundError:
+        return None
+
+
+def load_openssh_ed25519_identity(path: Path) -> tuple[bytes, bytes]:
+    text = path.read_text()
+    encoded = "".join(line for line in text.splitlines() if not line.startswith("-----"))
+    data = base64.b64decode(encoded)
+    magic = b"openssh-key-v1\0"
+    if not data.startswith(magic):
+        raise ValueError("Unsupported Ollama identity format")
+
+    offset = len(magic)
+    cipher, offset = read_ssh_string(data, offset)
+    kdf, offset = read_ssh_string(data, offset)
+    _, offset = read_ssh_string(data, offset)
+    key_count, offset = read_ssh_uint32(data, offset)
+    if cipher != b"none" or kdf != b"none" or key_count != 1:
+        raise ValueError("Unsupported encrypted or multi-key Ollama identity")
+
+    _, offset = read_ssh_string(data, offset)
+    private_blob, _ = read_ssh_string(data, offset)
+    offset = 8
+    key_type, offset = read_ssh_string(private_blob, offset)
+    public_key, offset = read_ssh_string(private_blob, offset)
+    private_key, _ = read_ssh_string(private_blob, offset)
+    if key_type != b"ssh-ed25519" or len(private_key) != 64:
+        raise ValueError("Ollama identity must be an Ed25519 key")
+
+    seed, derived_public_key = private_key[:32], private_key[32:]
+    if public_key != derived_public_key or ed25519_public_key(seed) != derived_public_key:
+        raise ValueError("Ollama identity public key mismatch")
+    return seed, derived_public_key
+
+
+def read_ssh_uint32(data: bytes, offset: int) -> tuple[int, int]:
+    return struct.unpack(">I", data[offset : offset + 4])[0], offset + 4
+
+
+def read_ssh_string(data: bytes, offset: int) -> tuple[bytes, int]:
+    length, offset = read_ssh_uint32(data, offset)
+    return data[offset : offset + length], offset + length
+
+
+def ssh_string(value: bytes) -> bytes:
+    return struct.pack(">I", len(value)) + value
+
+
+def ollama_auth_token(seed: bytes, public_key: bytes) -> str:
+    check_url = f"https://ollama.com?ts={int(time.time())}"
+    zero_sum = base64.b64encode(hashlib.sha256(b"").hexdigest().encode("ascii")).decode("ascii")
+    check_data = f"GET,{check_url},{zero_sum}".encode("utf-8")
+    signature = ed25519_sign(check_data, seed, public_key)
+    public_key_blob = ssh_string(b"ssh-ed25519") + ssh_string(public_key)
+    return ":".join(
+        [
+            base64.b64encode(check_url.encode("utf-8")).decode("ascii"),
+            base64.b64encode(public_key_blob).decode("ascii"),
+            base64.b64encode(signature).decode("ascii"),
+        ]
+    )
+
+
+def ed25519_public_key(seed: bytes) -> bytes:
+    hashed = hashlib.sha512(seed).digest()
+    scalar = int.from_bytes(hashed[:32], "little")
+    scalar &= (1 << 254) - 8
+    scalar |= 1 << 254
+    return ed25519_encode_point(ed25519_scalar_multiply(ED25519_B, scalar))
+
+
+def ed25519_sign(message: bytes, seed: bytes, public_key: bytes) -> bytes:
+    hashed = hashlib.sha512(seed).digest()
+    scalar = int.from_bytes(hashed[:32], "little")
+    scalar &= (1 << 254) - 8
+    scalar |= 1 << 254
+    nonce = ed25519_hint(hashed[32:] + message) % ED25519_Q
+    encoded_nonce = ed25519_encode_point(ed25519_scalar_multiply(ED25519_B, nonce))
+    signature_scalar = (
+        nonce + ed25519_hint(encoded_nonce + public_key + message) * scalar
+    ) % ED25519_Q
+    return encoded_nonce + signature_scalar.to_bytes(32, "little")
+
+
+def ed25519_hint(value: bytes) -> int:
+    return int.from_bytes(hashlib.sha512(value).digest(), "little")
+
+
+def ed25519_inverse(value: int) -> int:
+    return pow(value, ED25519_P - 2, ED25519_P)
+
+
+def ed25519_add(
+    first: tuple[int, int],
+    second: tuple[int, int],
+) -> tuple[int, int]:
+    x1, y1 = first
+    x2, y2 = second
+    x3 = (x1 * y2 + x2 * y1) * ed25519_inverse(1 + ED25519_D * x1 * x2 * y1 * y2) % ED25519_P
+    y3 = (y1 * y2 + x1 * x2) * ed25519_inverse(1 - ED25519_D * x1 * x2 * y1 * y2) % ED25519_P
+    return x3, y3
+
+
+def ed25519_scalar_multiply(point: tuple[int, int], scalar: int) -> tuple[int, int]:
+    if scalar == 0:
+        return (0, 1)
+    result = ed25519_scalar_multiply(point, scalar // 2)
+    result = ed25519_add(result, result)
+    if scalar & 1:
+        result = ed25519_add(result, point)
+    return result
+
+
+def ed25519_encode_point(point: tuple[int, int]) -> bytes:
+    x, y = point
+    encoded = bytearray(y.to_bytes(32, "little"))
+    encoded[31] |= (x & 1) << 7
+    return bytes(encoded)
+
+
 def fetch_json(url: str, retries: int) -> dict[str, Any]:
     last_error: Exception | None = None
     for attempt in range(retries + 1):
         try:
-            with urllib.request.urlopen(url, timeout=30) as response:
+            write_log("manifest request", url=url, attempt=attempt + 1)
+            with registry_urlopen(registry_request(url), timeout=30) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
-            body = error.read().decode("utf-8", errors="replace").strip()
-            message = f"HTTP {error.code} {error.reason}"
-            if body:
-                message = f"{message}: {body}"
+            message = http_error_message(error)
+            write_log("manifest request failed", url=url, attempt=attempt + 1, error=message)
             last_error = RuntimeError(message)
             if 400 <= error.code < 500:
                 break
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+            write_log("manifest request failed", url=url, attempt=attempt + 1, error=error)
             last_error = error
         if attempt < retries:
             time.sleep(min(2**attempt, 10))
     raise RuntimeError(f"Failed to fetch JSON from {url}: {last_error}")
+
+
+def http_error_message(error: urllib.error.HTTPError) -> str:
+    body = error.read().decode("utf-8", errors="replace").strip()
+    message = f"HTTP {error.code} {error.reason}"
+    if body:
+        message = f"{message}: {body}"
+    return message
 
 
 def install_manifest(paths: ModelPaths, manifest: dict[str, Any]) -> None:
@@ -332,7 +520,7 @@ def download_blob(
                     f"{temp} is sparse or non-contiguous; only {format_size(prefix_size)} "
                     f"is usable as a simple resume prefix"
                 )
-            request = urllib.request.Request(url)
+            request = registry_request(url)
             mode = "ab" if resume_at else "wb"
             if resume_at:
                 request.add_header("Range", f"bytes={resume_at}-")
@@ -340,6 +528,13 @@ def download_blob(
             print(f"Downloading: {final.name}", flush=True)
             if resume_at:
                 print(f"Resuming at: {format_size(resume_at)}", flush=True)
+            write_log(
+                "blob request",
+                url=url,
+                digest=digest,
+                attempt=attempt + 1,
+                resume_at=resume_at,
+            )
             emit_progress(
                 progress,
                 {
@@ -349,7 +544,7 @@ def download_blob(
                     "resume_at": resume_at,
                 },
             )
-            with urllib.request.urlopen(request, timeout=60) as response, temp.open(mode) as file:
+            with registry_urlopen(request, timeout=60) as response, temp.open(mode) as file:
                 total = response.headers.get("Content-Length")
                 total_bytes = int(total) + resume_at if total and total.isdigit() else None
                 downloaded = resume_at
@@ -407,7 +602,24 @@ def download_blob(
                 return
 
             raise RuntimeError(f"Checksum mismatch for {final.name}")
+        except urllib.error.HTTPError as error:
+            message = http_error_message(error)
+            write_log("blob request failed", url=url, digest=digest, attempt=attempt + 1, error=message)
+            if attempt >= retries or 400 <= error.code < 500:
+                raise RuntimeError(f"Failed to download {digest}: {message}") from error
+            print(f"Retrying {final.name}: {message}", file=sys.stderr, flush=True)
+            emit_progress(
+                progress,
+                {
+                    "type": "blob-retry",
+                    "digest": digest,
+                    "error": message,
+                    "attempt": attempt + 1,
+                },
+            )
+            time.sleep(min(2**attempt, 10))
         except (urllib.error.URLError, TimeoutError, RuntimeError) as error:
+            write_log("blob request failed", url=url, digest=digest, attempt=attempt + 1, error=error)
             if attempt >= retries:
                 raise RuntimeError(f"Failed to download {digest}: {error}") from error
             print(f"Retrying {final.name}: {error}", file=sys.stderr, flush=True)

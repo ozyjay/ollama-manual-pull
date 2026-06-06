@@ -15,6 +15,7 @@ final class AppStore: ObservableObject {
 
     private var apiClient: APIClient?
     private var refreshTask: Task<Void, Never>?
+    private var refreshInFlight = false
     private var refreshPending = false
 
     var selectedItem: QueueItem? {
@@ -64,14 +65,22 @@ final class AppStore: ObservableObject {
         refreshTask = nil
     }
 
-    func refreshState() async {
+    func refreshState(showIndicator: Bool = true) async {
         guard apiClient != nil else { return }
-        if isRefreshing {
+        if refreshInFlight {
             refreshPending = true
             return
         }
-        isRefreshing = true
-        defer { isRefreshing = false }
+        refreshInFlight = true
+        if showIndicator {
+            isRefreshing = true
+        }
+        defer {
+            refreshInFlight = false
+            if showIndicator {
+                isRefreshing = false
+            }
+        }
         repeat {
             refreshPending = false
             guard !Task.isCancelled else { break }
@@ -228,7 +237,7 @@ final class AppStore: ObservableObject {
                 } catch {
                     break
                 }
-                await self?.refreshState()
+                await self?.refreshState(showIndicator: false)
             }
         }
     }
