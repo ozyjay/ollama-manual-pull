@@ -49,6 +49,11 @@ private struct ActiveDownloadSummary: View {
         store.snapshot?.items.first { $0.status == "running" }
     }
 
+    private var isSelected: Bool {
+        guard let activeItem else { return false }
+        return store.selectedId == activeItem.id
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: activeItem == nil ? "tray" : "arrow.down.circle.fill")
@@ -77,6 +82,12 @@ private struct ActiveDownloadSummary: View {
             }
         }
         .padding(18)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .contentShape(Rectangle())
+        .background(isSelected ? Color.accentColor.opacity(0.12) : Color(nsColor: .windowBackgroundColor))
+        .onTapGesture {
+            if let activeItem {
+                store.selectedId = activeItem.id
+            }
+        }
     }
 }

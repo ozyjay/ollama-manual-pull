@@ -34,7 +34,7 @@ struct QueueItem: Decodable, Identifiable {
     let status: String
     let error: String?
     let currentBlob: String?
-    let messages: [String]
+    let messages: [QueueMessage]
     let progress: DownloadProgress
     let createdAt: Double
     let updatedAt: Double
@@ -51,6 +51,28 @@ struct QueueItem: Decodable, Identifiable {
         case progress
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+}
+
+struct QueueMessage: Decodable {
+    let timestamp: Double?
+    let text: String
+
+    init(from decoder: Decoder) throws {
+        let single = try decoder.singleValueContainer()
+        if let value = try? single.decode(String.self) {
+            timestamp = nil
+            text = value
+            return
+        }
+        let keyed = try decoder.container(keyedBy: CodingKeys.self)
+        timestamp = try keyed.decodeIfPresent(Double.self, forKey: .timestamp)
+        text = try keyed.decode(String.self, forKey: .text)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case timestamp
+        case text
     }
 }
 

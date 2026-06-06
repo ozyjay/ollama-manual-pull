@@ -185,7 +185,7 @@ class DownloadQueue:
                     with self._condition:
                         item["status"] = "failed"
                         item["error"] = str(error)
-                        item["messages"].append(f"failed: {error}")
+                        self._append_message_locked(item, f"failed: {error}")
                         item["progress"]["phase"] = "failed"
                         item["updated_at"] = time.time()
                         self._condition.notify_all()
@@ -205,7 +205,7 @@ class DownloadQueue:
             item = self._find_item(item_id)
             event_type = event.get("type")
             if event_type is not None:
-                item["messages"].append(str(event_type))
+                self._append_message_locked(item, str(event_type))
                 self._update_progress_locked(item, event)
             digest = event.get("digest")
             if digest is not None:
@@ -275,6 +275,9 @@ class DownloadQueue:
             "eta_seconds": event.get("eta_seconds"),
             "line": event.get("line"),
         }
+
+    def _append_message_locked(self, item: dict[str, Any], text: str) -> None:
+        item["messages"].append({"timestamp": time.time(), "text": text})
 
     def _refresh_overall_locked(self, item: dict[str, Any]) -> None:
         progress = item["progress"]

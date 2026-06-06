@@ -52,6 +52,8 @@ class MacOSAppBuilderTests(unittest.TestCase):
             self.assertIn("BottomCommandBar", combined_source)
             self.assertIn('items.filter { $0.status != "running" }', combined_source)
             self.assertIn("ForEach(listedItems)", combined_source)
+            self.assertIn("store.selectedId == activeItem.id", combined_source)
+            self.assertIn("store.selectedId = activeItem.id", combined_source)
             self.assertIn("isRefreshing", combined_source)
             self.assertIn("NSHostingView", combined_source)
             self.assertIn("URLSession", combined_source)

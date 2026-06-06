@@ -443,6 +443,13 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.message-time {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-bottom: 2px;
+}
+
 @media (max-width: 900px) {
   .app {
     grid-template-columns: 1fr;

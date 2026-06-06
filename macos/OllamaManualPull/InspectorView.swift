@@ -54,10 +54,17 @@ struct InspectorView: View {
                             } else {
                                 VStack(alignment: .leading, spacing: 6) {
                                     ForEach(Array(item.messages.suffix(8).enumerated()), id: \.offset) { _, message in
-                                        Text(message)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            if let timestamp = message.timestamp {
+                                                Text(AppFormatters.date(timestamp))
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.tertiary)
+                                            }
+                                            Text(message.text)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
                                     }
                                 }
                             }

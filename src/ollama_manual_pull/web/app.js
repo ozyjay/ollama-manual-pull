@@ -95,6 +95,21 @@ function formatTime(seconds) {
   return date.toLocaleString();
 }
 
+function messageText(message) {
+  if (typeof message === "string") {
+    return message;
+  }
+  return message?.text || "";
+}
+
+function renderMessage(message) {
+  const text = messageText(message);
+  if (message && typeof message === "object" && Number.isFinite(message.timestamp)) {
+    return `<li><span class="message-time">${escapeHtml(formatTime(message.timestamp))}</span>${escapeHtml(text)}</li>`;
+  }
+  return `<li>${escapeHtml(text)}</li>`;
+}
+
 function formatBytes(value) {
   if (!Number.isFinite(value)) {
     return "Unknown";
@@ -291,7 +306,7 @@ function renderActive() {
   }
 
   const messages = Array.isArray(running.messages) ? running.messages : [];
-  const lastMessage = messages.length ? messages[messages.length - 1] : "Waiting for progress";
+  const lastMessage = messages.length ? messageText(messages[messages.length - 1]) : "Waiting for progress";
   elements.active.innerHTML = `
     <div class="active-grid">
       <div class="row-meta">
@@ -380,7 +395,7 @@ function renderDetails() {
 
   const messages = Array.isArray(item.messages) ? item.messages.slice(-8) : [];
   const messageHtml = messages.length
-    ? `<ul class="message-list">${messages.map((message) => `<li>${escapeHtml(message)}</li>`).join("")}</ul>`
+    ? `<ul class="message-list">${messages.map(renderMessage).join("")}</ul>`
     : `<span class="muted">No messages yet.</span>`;
   const retryButton =
     item.status === "failed"

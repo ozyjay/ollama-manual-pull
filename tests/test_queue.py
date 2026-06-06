@@ -88,7 +88,8 @@ class DownloadQueueTests(unittest.TestCase):
         self.assertEqual(max_active, 1)
         self.assertEqual([item["status"] for item in snapshot["items"]], ["completed", "completed"])
         self.assertEqual(snapshot["items"][0]["current_blob"], "sha256:first")
-        self.assertIn("blob-start", snapshot["items"][0]["messages"])
+        self.assertEqual(snapshot["items"][0]["messages"][0]["text"], "blob-start")
+        self.assertIsInstance(snapshot["items"][0]["messages"][0]["timestamp"], float)
         self.assertEqual(first["status"], "waiting")
         self.assertEqual(second["status"], "waiting")
 
@@ -370,7 +371,8 @@ class DownloadQueueTests(unittest.TestCase):
         self.assertEqual(attempts, ["broken"])
         self.assertEqual(failed["status"], "failed")
         self.assertEqual(failed["error"], "download broke")
-        self.assertIn("failed: download broke", failed["messages"])
+        self.assertEqual(failed["messages"][0]["text"], "failed: download broke")
+        self.assertIsInstance(failed["messages"][0]["timestamp"], float)
         self.assertEqual(retried["status"], "waiting")
         self.assertIsNone(retried["error"])
 
