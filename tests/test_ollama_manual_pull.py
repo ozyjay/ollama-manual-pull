@@ -3,6 +3,7 @@ import io
 import json
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest import mock
 
@@ -24,6 +25,19 @@ class OllamaManualPullTests(unittest.TestCase):
         self.assertEqual(ref.namespace, "acme")
         self.assertEqual(ref.name, "model")
         self.assertEqual(ref.tag, "7b")
+
+    def test_fetch_json_includes_plain_text_http_error_body(self):
+        error = urllib.error.HTTPError(
+            "https://registry.ollama.ai/v2/library/qwen3.6/manifests/27b-coding-mxfp8",
+            412,
+            "Precondition Failed",
+            {},
+            io.BytesIO(b"this model requires macOS"),
+        )
+
+        with mock.patch("ollama_manual_pull.core.urllib.request.urlopen", side_effect=error):
+            with self.assertRaisesRegex(RuntimeError, "HTTP 412.*this model requires macOS"):
+                core.fetch_json(error.url, retries=0)
 
     def test_model_paths_match_ollama_layout(self):
         with tempfile.TemporaryDirectory() as tmp:

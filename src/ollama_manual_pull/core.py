@@ -177,10 +177,18 @@ def fetch_json(url: str, retries: int) -> dict[str, Any]:
         try:
             with urllib.request.urlopen(url, timeout=30) as response:
                 return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            body = error.read().decode("utf-8", errors="replace").strip()
+            message = f"HTTP {error.code} {error.reason}"
+            if body:
+                message = f"{message}: {body}"
+            last_error = RuntimeError(message)
+            if 400 <= error.code < 500:
+                break
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
             last_error = error
-            if attempt < retries:
-                time.sleep(min(2**attempt, 10))
+        if attempt < retries:
+            time.sleep(min(2**attempt, 10))
     raise RuntimeError(f"Failed to fetch JSON from {url}: {last_error}")
 
 
