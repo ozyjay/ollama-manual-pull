@@ -61,20 +61,37 @@ struct ProgressSummary: View {
     let progress: DownloadProgress
 
     private var amount: ProgressAmount {
-        progress.currentFile ?? progress.overall
+        progress.overall
+    }
+
+    private var currentFile: ProgressAmount? {
+        progress.currentFile
     }
 
     private var percent: Double {
-        min(100, max(0, amount.percent ?? progress.overall.percent ?? 0))
+        min(100, max(0, amount.percent ?? 0))
+    }
+
+    private var currentBlobLabel: String? {
+        guard let currentFile else { return nil }
+        if let index = currentFile.index, let totalFiles = currentFile.totalFiles {
+            return "Current blob \(index) of \(totalFiles)"
+        }
+        return currentFile.digest == nil ? nil : "Current blob"
+    }
+
+    private var currentPercent: Double? {
+        guard let value = currentFile?.percent else { return nil }
+        return min(100, max(0, value))
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 5) {
             ProgressView(value: percent, total: 100)
                 .progressViewStyle(.linear)
 
             HStack(spacing: 8) {
-                Text(progress.phase.isEmpty ? "Waiting" : progress.phase)
+                Text(progress.phase.isEmpty ? "Waiting" : "Model \(progress.phase)")
                     .lineLimit(1)
 
                 if let downloaded = amount.downloaded, let total = amount.total {
@@ -95,6 +112,22 @@ struct ProgressSummary: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+
+            if let currentFile, let currentBlobLabel {
+                HStack(spacing: 6) {
+                    Text(currentBlobLabel)
+                    if let currentPercent {
+                        Text(String(format: "%.0f%%", currentPercent))
+                    }
+                    if let digest = currentFile.digest {
+                        Text(digest)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            }
         }
     }
 }

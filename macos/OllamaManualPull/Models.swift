@@ -92,6 +92,8 @@ struct DownloadProgress: Decodable {
 
 struct ProgressAmount: Decodable {
     let digest: String?
+    let index: Int?
+    let totalFiles: Int?
     let downloaded: Double?
     let total: Double?
     let percent: Double?
@@ -101,6 +103,8 @@ struct ProgressAmount: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case digest
+        case index
+        case totalFiles = "total_files"
         case downloaded
         case total
         case percent

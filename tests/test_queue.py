@@ -129,11 +129,22 @@ class DownloadQueueTests(unittest.TestCase):
 
             progress = snapshot["items"][0]["progress"]
             self.assertEqual(progress["phase"], "downloading")
-            self.assertEqual(progress["overall"], {"downloaded": 2, "total": 10, "percent": 20.0})
+            self.assertEqual(
+                progress["overall"],
+                {
+                    "downloaded": 2,
+                    "total": 10,
+                    "percent": 20.0,
+                    "bytes_per_second": 8.0,
+                    "eta_seconds": 1,
+                },
+            )
             self.assertEqual(
                 progress["current_file"],
                 {
                     "digest": "sha256:first",
+                    "index": 1,
+                    "total_files": 2,
                     "downloaded": 2,
                     "total": 4,
                     "percent": 50.0,
@@ -202,7 +213,16 @@ class DownloadQueueTests(unittest.TestCase):
 
         progress = snapshot["items"][0]["progress"]
         self.assertEqual(progress["phase"], "retrying")
-        self.assertEqual(progress["overall"], {"downloaded": 12, "total": None, "percent": None})
+        self.assertEqual(
+            progress["overall"],
+            {
+                "downloaded": 12,
+                "total": None,
+                "percent": None,
+                "bytes_per_second": 3.0,
+                "eta_seconds": None,
+            },
+        )
         self.assertEqual(progress["current_file"]["digest"], "sha256:unknown")
         self.assertIsNone(progress["current_file"]["total"])
         self.assertIsNone(progress["current_file"]["percent"])

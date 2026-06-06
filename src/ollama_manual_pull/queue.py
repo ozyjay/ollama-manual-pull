@@ -76,6 +76,7 @@ class DownloadQueue:
                 "messages": [],
                 "progress": _empty_progress(),
                 "_planned_files": {},
+                "_planned_file_order": [],
                 "_completed_files": {},
                 "created_at": now,
                 "updated_at": now,
@@ -123,6 +124,7 @@ class DownloadQueue:
             item["current_blob"] = None
             item["progress"] = _empty_progress()
             item["_planned_files"] = {}
+            item["_planned_file_order"] = []
             item["_completed_files"] = {}
             item["updated_at"] = time.time()
             self._condition.notify_all()
@@ -252,6 +254,7 @@ class DownloadQueue:
                 if file.get("digest") is not None
             }
             item["_planned_files"] = planned
+            item["_planned_file_order"] = list(planned)
             progress["overall"] = {
                 "downloaded": 0,
                 "total": event.get("total_bytes"),
@@ -262,6 +265,7 @@ class DownloadQueue:
             progress["phase"] = "downloading"
             progress["current_file"] = {
                 "digest": event.get("digest"),
+                **self._file_position_fields(item, event.get("digest")),
                 "downloaded": event.get("resume_at", 0),
                 "total": item["_planned_files"].get(event.get("digest")),
                 "percent": None,
@@ -273,14 +277,20 @@ class DownloadQueue:
             return
         if event_type == "blob-progress":
             progress["phase"] = "downloading"
-            progress["current_file"] = self._file_progress_from_event(event)
+            progress["current_file"] = {
+                **self._file_progress_from_event(event),
+                **self._file_position_fields(item, event.get("digest")),
+            }
             self._refresh_overall_locked(item)
             return
         if event_type == "blob-complete":
             digest = event.get("digest")
             if digest is not None:
                 item["_completed_files"][str(digest)] = event.get("total") or event.get("downloaded")
-            progress["current_file"] = self._file_progress_from_event(event)
+            progress["current_file"] = {
+                **self._file_progress_from_event(event),
+                **self._file_position_fields(item, event.get("digest")),
+            }
             self._refresh_overall_locked(item)
             return
         if event_type == "blob-retry":
@@ -305,6 +315,16 @@ class DownloadQueue:
     def _append_message_locked(self, item: dict[str, Any], text: str) -> None:
         item["messages"].append({"timestamp": time.time(), "text": text})
 
+    def _file_position_fields(self, item: dict[str, Any], digest: Any) -> dict[str, int]:
+        if digest is None:
+            return {}
+        order = item.get("_planned_file_order", [])
+        try:
+            index = order.index(str(digest)) + 1
+        except ValueError:
+            return {}
+        return {"index": index, "total_files": len(order)}
+
     def _refresh_overall_locked(self, item: dict[str, Any]) -> None:
         progress = item["progress"]
         current = progress.get("current_file") or {}
@@ -325,6 +345,10 @@ class DownloadQueue:
             "total": total,
             "percent": percent,
         }
+        speed = current.get("bytes_per_second")
+        if isinstance(speed, (int, float)) and speed > 0:
+            progress["overall"]["bytes_per_second"] = float(speed)
+            progress["overall"]["eta_seconds"] = int(max((total or downloaded) - downloaded, 0) / speed) if total else None
 
     def _complete_progress_locked(self, item: dict[str, Any]) -> None:
         progress = item["progress"]

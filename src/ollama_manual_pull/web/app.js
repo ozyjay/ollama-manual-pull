@@ -180,31 +180,42 @@ function progressBar(progress, label) {
   `;
 }
 
+function blobPositionText(currentFile) {
+  if (Number.isFinite(currentFile?.index) && Number.isFinite(currentFile?.total_files)) {
+    return `Current blob ${currentFile.index} of ${currentFile.total_files}`;
+  }
+  return "Current blob";
+}
+
 function renderProgressBlock(progress, options = {}) {
   const overall = progress?.overall || {};
   const currentFile = progress?.current_file || {};
   const overallPercent = percentText(overall.percent);
   const currentPercent = percentText(currentFile.percent);
-  const speed = currentFile.bytes_per_second;
-  const eta = currentFile.eta_seconds;
+  const speed = overall.bytes_per_second;
+  const eta = overall.eta_seconds;
+  const currentSpeed = currentFile.bytes_per_second;
   return `
     <div class="${escapeHtml(options.compact ? "progress-block compact" : "progress-block")}">
       ${progressBar(overall, "Overall download progress")}
       <div class="progress-summary">
         <span>${escapeHtml(overallPercent || progressAmountText(overall))}</span>
-        <span>${escapeHtml(progressAmountText(overall))}</span>
+        <span>
+          ${escapeHtml(progressAmountText(overall))}
+          ${Number.isFinite(speed) ? ` &middot; ${escapeHtml(formatRate(speed))}` : ""}
+          ${Number.isFinite(eta) ? ` &middot; ETA ${escapeHtml(formatEta(eta))}` : ""}
+        </span>
       </div>
       ${
         options.showFile === false
           ? ""
           : `<div class="progress-file">
-              <span class="field-label">Current file</span>
+              <span class="field-label">${escapeHtml(blobPositionText(currentFile))}</span>
               <span class="blob">${escapeHtml(currentFile.digest || "Waiting for file")}</span>
               ${progressBar(currentFile, "Current file progress")}
               <span class="row-subtitle">
                 ${escapeHtml(currentPercent || progressAmountText(currentFile))}
-                ${Number.isFinite(speed) ? ` &middot; ${escapeHtml(formatRate(speed))}` : ""}
-                ${Number.isFinite(eta) ? ` &middot; ETA ${escapeHtml(formatEta(eta))}` : ""}
+                ${Number.isFinite(currentSpeed) ? ` &middot; ${escapeHtml(formatRate(currentSpeed))}` : ""}
               </span>
             </div>`
       }

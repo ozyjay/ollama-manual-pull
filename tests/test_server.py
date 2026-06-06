@@ -208,6 +208,19 @@ class ServerTests(unittest.TestCase):
         for asset in ["index.html", "styles.css", "app.js"]:
             self.assertTrue((project_root / "src" / "ollama_manual_pull" / "web" / asset).is_file())
 
+    def test_web_progress_summary_uses_overall_speed_and_eta(self):
+        app_js = (
+            Path(__file__).resolve().parents[1]
+            / "src"
+            / "ollama_manual_pull"
+            / "web"
+            / "app.js"
+        ).read_text()
+
+        self.assertIn("overall.bytes_per_second", app_js)
+        self.assertIn("overall.eta_seconds", app_js)
+        self.assertIn("blobPositionText(currentFile)", app_js)
+
 
 if __name__ == "__main__":
     unittest.main()
