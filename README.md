@@ -84,6 +84,22 @@ The app opens its own native macOS window and starts the local Python server in 
 
 ## Development
 
+The repo includes a terminal runner for common local tasks:
+
+```bash
+./scripts/tool.sh help
+./scripts/tool.sh test
+./scripts/tool.sh build
+./scripts/tool.sh run-app
+./scripts/tool.sh install
+./scripts/tool.sh install-cli
+./scripts/tool.sh run-web
+./scripts/tool.sh pull qwen3-coder:30b --dry-run
+```
+
+Set `PYTHON=/path/to/python3` to override the active `python3`.
+The runner writes app bundles to `build/` so it does not collide with existing `dist/` output.
+
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 python3 -m py_compile src/ollama_manual_pull/*.py tests/*.py
