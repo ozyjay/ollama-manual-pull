@@ -7,6 +7,10 @@ struct QueueView: View {
         store.snapshot?.items ?? []
     }
 
+    private var listedItems: [QueueItem] {
+        items.filter { $0.status != "running" }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ActiveDownloadSummary()
@@ -15,14 +19,14 @@ struct QueueView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    if items.isEmpty {
+                    if listedItems.isEmpty {
                         Text("No queued models.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(18)
                     } else {
-                        ForEach(items) { item in
+                        ForEach(listedItems) { item in
                             QueueRowView(item: item, isSelected: store.selectedId == item.id)
                                 .contentShape(Rectangle())
                                 .onTapGesture {
