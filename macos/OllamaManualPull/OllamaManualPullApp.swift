@@ -47,6 +47,11 @@ struct OllamaManualPullApp: App {
                 .keyboardShortcut("p", modifiers: [.command, .shift])
                 .disabled(!store.canPauseQueue)
 
+                Button("Stop After Blob") {
+                    Task { await store.stopAfterCurrentBlob() }
+                }
+                .disabled(!store.canStopAfterBlob)
+
                 Divider()
 
                 Button("Retry Selected Item") {

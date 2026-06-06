@@ -513,5 +513,31 @@ class OllamaManualPullTests(unittest.TestCase):
             ],
         )
 
+    def test_pull_model_stops_after_blob_when_callback_requests_it(self):
+        downloaded = []
+        manifest = {
+            "schemaVersion": 2,
+            "config": {"digest": "sha256:" + "a" * 64, "size": 3},
+            "layers": [{"digest": "sha256:" + "b" * 64, "size": 5}],
+        }
+
+        def fake_download_blob(**kwargs):
+            downloaded.append(kwargs["digest"])
+
+        with mock.patch.object(omp.core, "fetch_json", return_value=manifest):
+            with mock.patch.object(omp.core, "download_blob", side_effect=fake_download_blob):
+                with tempfile.TemporaryDirectory() as tmp:
+                    with self.assertRaises(omp.DownloadStoppedAfterBlob):
+                        omp.pull_model(
+                            "qwen3-coder:30b",
+                            models_dir=Path(tmp),
+                            registry=omp.DEFAULT_REGISTRY,
+                            retries=0,
+                            dry_run=True,
+                            stop_after_blob=lambda: True,
+                        )
+
+        self.assertEqual(downloaded, ["sha256:" + "a" * 64])
+
 if __name__ == "__main__":
     unittest.main()

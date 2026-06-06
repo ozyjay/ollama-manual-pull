@@ -66,6 +66,11 @@ private struct ActiveDownloadSummary: View {
                     .lineLimit(1)
                 if let activeItem {
                     ProgressSummary(progress: activeItem.progress)
+                    if store.snapshot?.stopAfterBlobRequested == true {
+                        Text("Will stop after the current blob finishes.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
                     Text(store.snapshot?.pauseRequested == true ? "Queue will pause after the current item." : "Queue is idle.")
                         .font(.caption)

@@ -129,6 +129,13 @@ struct BottomCommandBar: View {
             }
             .disabled(!store.canPauseQueue)
 
+            Button {
+                Task { await store.stopAfterCurrentBlob() }
+            } label: {
+                Label("Stop After Blob", systemImage: "stop.circle")
+            }
+            .disabled(!store.canStopAfterBlob)
+
             Divider()
                 .frame(height: 22)
 

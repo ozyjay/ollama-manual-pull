@@ -3,6 +3,7 @@
 from .core import (
     DEFAULT_HOST,
     DEFAULT_REGISTRY,
+    DownloadStoppedAfterBlob,
     ModelPaths,
     ModelRef,
     build_parser,
@@ -26,6 +27,7 @@ from .server import run_web
 __all__ = [
     "DEFAULT_HOST",
     "DEFAULT_REGISTRY",
+    "DownloadStoppedAfterBlob",
     "ModelPaths",
     "ModelRef",
     "build_parser",

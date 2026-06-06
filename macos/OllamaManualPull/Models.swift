@@ -3,6 +3,7 @@ import Foundation
 struct AppSnapshot: Decodable {
     let running: Bool
     let pauseRequested: Bool
+    let stopAfterBlobRequested: Bool
     let modelsDir: String
     let registry: String
     let retries: Int
@@ -12,6 +13,7 @@ struct AppSnapshot: Decodable {
     enum CodingKeys: String, CodingKey {
         case running
         case pauseRequested = "pause_requested"
+        case stopAfterBlobRequested = "stop_after_blob_requested"
         case modelsDir = "models_dir"
         case registry
         case retries

@@ -65,6 +65,9 @@ class AppRequestHandler(BaseHTTPRequestHandler):
                 self.server.queue.pause_after_current()
                 self._send_json(self.server.queue.snapshot())
                 return
+            if path == "/api/stop-after-blob":
+                self._send_json(self.server.queue.stop_after_current_blob())
+                return
             if path == "/api/installed/remove":
                 payload = self._read_json_body()
                 model = payload.get("model")

@@ -24,6 +24,7 @@ from .app_logging import write_log
 DEFAULT_REGISTRY = "https://registry.ollama.ai"
 DEFAULT_HOST = "registry.ollama.ai"
 ProgressCallback = Callable[[dict[str, Any]], None]
+StopAfterBlobCallback = Callable[[], bool]
 ED25519_P = 2**255 - 19
 ED25519_Q = 2**252 + 27742317777372353535851937790883648493
 ED25519_D = -121665 * pow(121666, ED25519_P - 2, ED25519_P) % ED25519_P
@@ -34,6 +35,10 @@ ED25519_B = (
 
 
 class ProgressCallbackError(Exception):
+    pass
+
+
+class DownloadStoppedAfterBlob(Exception):
     pass
 
 
@@ -644,6 +649,7 @@ def pull_model(
     dry_run: bool,
     resume_from: Path | None = None,
     progress: ProgressCallback | None = None,
+    stop_after_blob: StopAfterBlobCallback | None = None,
 ) -> None:
     ref = parse_model_ref(model)
     host = urllib.parse.urlparse(registry).netloc or DEFAULT_HOST
@@ -684,6 +690,8 @@ def pull_model(
             resume_from=resume_from,
             progress=progress,
         )
+        if stop_after_blob is not None and stop_after_blob():
+            raise DownloadStoppedAfterBlob
 
     if dry_run:
         print(f"Would write manifest: {paths.manifest}", flush=True)

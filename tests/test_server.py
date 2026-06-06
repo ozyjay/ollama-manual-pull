@@ -152,6 +152,19 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("error", payload)
 
+    def test_stop_after_blob_endpoint_sets_queue_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base_url = self.start_server(tmp)
+
+            status, payload = self.request_json(
+                f"{base_url}/api/stop-after-blob",
+                method="POST",
+            )
+
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["pause_requested"])
+        self.assertTrue(payload["stop_after_blob_requested"])
+
     def test_path_traversal_and_static_missing_return_404(self):
         with tempfile.TemporaryDirectory() as tmp:
             base_url = self.start_server(tmp)

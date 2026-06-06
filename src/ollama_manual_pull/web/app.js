@@ -20,6 +20,7 @@ const elements = {
   queue: document.getElementById("queue"),
   start: document.getElementById("start"),
   pause: document.getElementById("pause"),
+  stopAfterBlob: document.getElementById("stop-after-blob"),
   details: document.getElementById("details"),
 };
 
@@ -307,6 +308,9 @@ function renderActive() {
 
   const messages = Array.isArray(running.messages) ? running.messages : [];
   const lastMessage = messages.length ? messageText(messages[messages.length - 1]) : "Waiting for progress";
+  const pendingStop = state.snapshot?.stop_after_blob_requested
+    ? `<div class="row-subtitle">Will stop after the current blob finishes.</div>`
+    : "";
   elements.active.innerHTML = `
     <div class="active-grid">
       <div class="row-meta">
@@ -315,6 +319,7 @@ function renderActive() {
       </div>
       ${renderProgressBlock(running.progress)}
       <div class="row-subtitle">${escapeHtml(lastMessage)}</div>
+      ${pendingStop}
     </div>
   `;
 }
@@ -468,6 +473,7 @@ function renderControls() {
   const hasWaiting = Boolean(snapshot?.items?.some((item) => item.status === "waiting"));
   elements.start.disabled = !hasWaiting;
   elements.pause.disabled = !snapshot?.running;
+  elements.stopAfterBlob.disabled = !snapshot?.running || Boolean(snapshot?.stop_after_blob_requested);
 }
 
 function renderState() {
@@ -611,6 +617,16 @@ elements.pause.addEventListener("click", async () => {
     await refreshState();
   } catch (error) {
     showError(`Pause failed: ${error.message}`);
+  }
+});
+
+elements.stopAfterBlob.addEventListener("click", async () => {
+  try {
+    await api("/api/stop-after-blob", { method: "POST" });
+    showError("");
+    await refreshState();
+  } catch (error) {
+    showError(`Stop after blob failed: ${error.message}`);
   }
 });
 

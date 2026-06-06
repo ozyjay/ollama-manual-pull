@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 import ollama_manual_pull.queue as queue_module
+from ollama_manual_pull.core import DownloadStoppedAfterBlob
 from ollama_manual_pull.queue import DownloadQueue
 
 
@@ -464,6 +465,44 @@ class DownloadQueueTests(unittest.TestCase):
         self.assertEqual(calls, ["first"])
         self.assertTrue(snapshot["pause_requested"])
         self.assertEqual([item["status"] for item in snapshot["items"]], ["completed", "waiting"])
+
+    def test_stop_after_current_blob_returns_running_item_to_waiting(self):
+        first_blob_complete = threading.Event()
+        stop_requested = threading.Event()
+        downloaded = []
+
+        def fake_pull(model, **kwargs):
+            progress = kwargs["progress"]
+            progress({"type": "blob-start", "digest": "sha256:first"})
+            progress({"type": "blob-complete", "digest": "sha256:first", "downloaded": 4, "total": 4})
+            downloaded.append("first")
+            first_blob_complete.set()
+            self.assertTrue(stop_requested.wait(2))
+            if kwargs["stop_after_blob"]():
+                raise DownloadStoppedAfterBlob
+            progress({"type": "blob-start", "digest": "sha256:second"})
+            downloaded.append("second")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = DownloadQueue(models_dir=Path(tmp), pull_func=fake_pull)
+            item = queue.add("qwen3-coder:30b")
+
+            queue.start()
+            self.assertTrue(first_blob_complete.wait(2))
+            snapshot = queue.stop_after_current_blob()
+            stop_requested.set()
+            self.assertTrue(queue.wait_until_idle(2))
+            final = queue.snapshot()
+
+        self.assertTrue(snapshot["stop_after_blob_requested"])
+        self.assertEqual(downloaded, ["first"])
+        self.assertFalse(final["running"])
+        self.assertTrue(final["pause_requested"])
+        self.assertFalse(final["stop_after_blob_requested"])
+        self.assertEqual(final["items"][0]["id"], item["id"])
+        self.assertEqual(final["items"][0]["status"], "waiting")
+        self.assertEqual(final["items"][0]["current_blob"], "sha256:first")
+        self.assertEqual(final["items"][0]["messages"][-1]["text"], "stopped after current blob")
 
 
 if __name__ == "__main__":

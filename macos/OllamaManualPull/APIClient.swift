@@ -28,6 +28,10 @@ struct APIClient {
         try await request("/api/pause", method: "POST")
     }
 
+    func stopAfterCurrentBlob() async throws -> AppSnapshot {
+        try await request("/api/stop-after-blob", method: "POST")
+    }
+
     func retry(_ item: QueueItem) async throws -> QueueItem {
         try await request("/api/retry/\(encodedPath(item.id))", method: "POST")
     }

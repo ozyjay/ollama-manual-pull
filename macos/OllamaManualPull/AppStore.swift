@@ -30,6 +30,11 @@ final class AppStore: ObservableObject {
         snapshot?.running ?? false
     }
 
+    var canStopAfterBlob: Bool {
+        guard let snapshot else { return false }
+        return snapshot.running && !snapshot.stopAfterBlobRequested
+    }
+
     var canRetrySelected: Bool {
         selectedItem?.status == "failed"
     }
@@ -175,6 +180,18 @@ final class AppStore: ObservableObject {
         } catch {
             if isCancellation(error) || Task.isCancelled { return }
             appError = "Pause failed: \(error.localizedDescription)"
+        }
+    }
+
+    func stopAfterCurrentBlob() async {
+        guard let apiClient else { return }
+        do {
+            _ = try await apiClient.stopAfterCurrentBlob()
+            clearActionError(prefix: "Stop after blob failed:")
+            await refreshState()
+        } catch {
+            if isCancellation(error) || Task.isCancelled { return }
+            appError = "Stop after blob failed: \(error.localizedDescription)"
         }
     }
 

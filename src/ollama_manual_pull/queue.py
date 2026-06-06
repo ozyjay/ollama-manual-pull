@@ -7,7 +7,14 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .app_logging import write_log
-from .core import DEFAULT_REGISTRY, delete_installed_model, installed_models, parse_model_ref, pull_model
+from .core import (
+    DEFAULT_REGISTRY,
+    DownloadStoppedAfterBlob,
+    delete_installed_model,
+    installed_models,
+    parse_model_ref,
+    pull_model,
+)
 
 
 PullFunc = Callable[..., None]
@@ -45,6 +52,7 @@ class DownloadQueue:
         self._condition = threading.Condition()
         self._worker: threading.Thread | None = None
         self._pause_requested = False
+        self._stop_after_blob_requested = False
 
     def add(self, model: str) -> dict[str, Any]:
         canonical = canonical_model_ref(model)
@@ -81,6 +89,7 @@ class DownloadQueue:
             if self._worker is not None:
                 return
             self._pause_requested = False
+            self._stop_after_blob_requested = False
             worker = threading.Thread(target=self._run_worker, daemon=True)
             self._worker = worker
         try:
@@ -96,6 +105,13 @@ class DownloadQueue:
         with self._condition:
             self._pause_requested = True
             self._condition.notify_all()
+
+    def stop_after_current_blob(self) -> dict[str, Any]:
+        with self._condition:
+            self._pause_requested = True
+            self._stop_after_blob_requested = True
+            self._condition.notify_all()
+            return self.snapshot()
 
     def retry(self, item_id: str) -> dict[str, Any]:
         with self._condition:
@@ -133,6 +149,7 @@ class DownloadQueue:
                 "running": self._worker is not None
                 or any(item["status"] == "running" for item in self._items),
                 "pause_requested": self._pause_requested,
+                "stop_after_blob_requested": self._stop_after_blob_requested,
                 "models_dir": str(self.models_dir),
                 "registry": self.registry,
                 "retries": self.retries,
@@ -179,7 +196,16 @@ class DownloadQueue:
                         retries=self.retries,
                         dry_run=False,
                         progress=lambda event, item_id=item["id"]: self._record_progress(item_id, event),
+                        stop_after_blob=self._stop_after_blob_requested_locked,
                     )
+                except DownloadStoppedAfterBlob:
+                    with self._condition:
+                        item["status"] = "waiting"
+                        item["progress"]["phase"] = "waiting"
+                        self._stop_after_blob_requested = False
+                        self._append_message_locked(item, "stopped after current blob")
+                        item["updated_at"] = time.time()
+                        self._condition.notify_all()
                 except Exception as error:
                     write_log("download failed", model=item["model"], error=error)
                     with self._condition:
@@ -319,9 +345,15 @@ class DownloadQueue:
                 return item
         raise KeyError(item_id)
 
+    def _stop_after_blob_requested_locked(self) -> bool:
+        with self._condition:
+            return self._stop_after_blob_requested
+
     def _clear_worker_locked(self) -> None:
         if self._worker is threading.current_thread():
             self._worker = None
+        if not any(item["status"] == "running" for item in self._items):
+            self._stop_after_blob_requested = False
         self._condition.notify_all()
 
     def _copy_item(self, item: dict[str, Any]) -> dict[str, Any]:
