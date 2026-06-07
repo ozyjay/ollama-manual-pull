@@ -5,6 +5,7 @@ const state = {
   selectedId: null,
   searchResults: [],
   searchBusy: false,
+  cleanupReport: null,
 };
 
 const elements = {
@@ -16,6 +17,10 @@ const elements = {
   searchStatus: document.getElementById("search-status"),
   searchResults: document.getElementById("search-results"),
   installed: document.getElementById("installed"),
+  cleanupScan: document.getElementById("cleanup-scan"),
+  cleanupPartials: document.getElementById("cleanup-partials"),
+  cleanupDelete: document.getElementById("cleanup-delete"),
+  cleanupResults: document.getElementById("cleanup-results"),
   active: document.getElementById("active"),
   queue: document.getElementById("queue"),
   start: document.getElementById("start"),
@@ -356,6 +361,40 @@ function renderInstalled() {
     .join("");
 }
 
+function cleanupOptions() {
+  return {
+    include_partials: Boolean(elements.cleanupPartials.checked),
+    older_than_days: 7,
+  };
+}
+
+function cleanupCandidateCount(report) {
+  if (!report) {
+    return 0;
+  }
+  return Number(report.orphan_blob_count || 0) + Number(report.stale_partial_count || 0);
+}
+
+function renderCleanupReport(report) {
+  state.cleanupReport = report;
+  if (!report) {
+    elements.cleanupResults.textContent = "Scan to find complete blobs that are not referenced by installed manifests.";
+    elements.cleanupDelete.disabled = true;
+    return;
+  }
+
+  const candidateCount = cleanupCandidateCount(report);
+  const mode = report.dry_run ? "Dry run" : "Deleted";
+  elements.cleanupResults.innerHTML = `
+    <div>${escapeHtml(mode)}: ${escapeHtml(report.referenced_count || 0)} referenced blobs.</div>
+    <div>Complete orphan blobs: ${escapeHtml(report.orphan_blob_count || 0)} (${escapeHtml(formatBytes(report.orphan_blob_bytes || 0))}).</div>
+    <div>Stale partial downloads: ${escapeHtml(report.stale_partial_count || 0)} (${escapeHtml(formatBytes(report.stale_partial_bytes || 0))}).</div>
+    <div>Shared blobs are kept. Partial downloads are included only when stale partials are enabled.</div>
+    ${report.deleted?.length ? `<div>Deleted files: ${escapeHtml(report.deleted.length)}.</div>` : ""}
+  `;
+  elements.cleanupDelete.disabled = candidateCount === 0 || !report.dry_run;
+}
+
 function renderQueue() {
   const items = state.snapshot?.items || [];
   if (!items.length) {
@@ -641,5 +680,42 @@ elements.stopAfterBlob.addEventListener("click", async () => {
   }
 });
 
+elements.cleanupScan.addEventListener("click", async () => {
+  try {
+    const report = await api("/api/cleanup/scan", { method: "POST", body: cleanupOptions() });
+    renderCleanupReport(report);
+    showError("");
+  } catch (error) {
+    showError(`Cleanup scan failed: ${error.message}`);
+  }
+});
+
+elements.cleanupDelete.addEventListener("click", async () => {
+  const report = state.cleanupReport;
+  if (!report || cleanupCandidateCount(report) === 0) {
+    return;
+  }
+  const includePartials = Boolean(elements.cleanupPartials.checked);
+  const message = includePartials
+    ? "Delete complete orphan blobs and stale partial downloads? Shared blobs are kept."
+    : "Delete complete orphan blobs? Shared blobs are kept and partial downloads are left in place.";
+  if (!window.confirm(message)) {
+    return;
+  }
+  try {
+    const deleted = await api("/api/cleanup/delete", { method: "POST", body: cleanupOptions() });
+    renderCleanupReport(deleted);
+    showError("");
+    await refreshState();
+  } catch (error) {
+    showError(`Cleanup delete failed: ${error.message}`);
+  }
+});
+
+elements.cleanupPartials.addEventListener("change", () => {
+  renderCleanupReport(null);
+});
+
+renderCleanupReport(null);
 refreshState();
 setInterval(refreshState, 1000);

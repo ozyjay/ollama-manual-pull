@@ -11,6 +11,9 @@ final class AppStore: ObservableObject {
     @Published var isSearching = false
     @Published var serverReady = false
     @Published var selectedSection: AppSection = .queue
+    @Published var cleanupReport: CleanupReport?
+    @Published var includeStalePartials = false
+    @Published var isCleanupBusy = false
     @Published private(set) var isRefreshing = false
 
     private var apiClient: APIClient?
@@ -242,6 +245,33 @@ final class AppStore: ObservableObject {
         } catch {
             if isCancellation(error) || Task.isCancelled { return }
             appError = "Delete model failed: \(error.localizedDescription)"
+        }
+    }
+
+    func scanCleanup() async {
+        guard let apiClient else { return }
+        isCleanupBusy = true
+        defer { isCleanupBusy = false }
+        do {
+            cleanupReport = try await apiClient.scanCleanup(includePartials: includeStalePartials)
+            clearActionError(prefix: "Cleanup scan failed:")
+        } catch {
+            if isCancellation(error) || Task.isCancelled { return }
+            appError = "Cleanup scan failed: \(error.localizedDescription)"
+        }
+    }
+
+    func deleteCleanupCandidates() async {
+        guard let apiClient else { return }
+        isCleanupBusy = true
+        defer { isCleanupBusy = false }
+        do {
+            cleanupReport = try await apiClient.deleteCleanupCandidates(includePartials: includeStalePartials)
+            clearActionError(prefix: "Cleanup delete failed:")
+            await refreshState()
+        } catch {
+            if isCancellation(error) || Task.isCancelled { return }
+            appError = "Cleanup delete failed: \(error.localizedDescription)"
         }
     }
 

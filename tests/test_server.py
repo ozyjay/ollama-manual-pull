@@ -1,6 +1,8 @@
 import json
+import os
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -123,6 +125,67 @@ class ServerTests(unittest.TestCase):
         self.assertFalse(manifest_exists)
         self.assertTrue(blob_exists)
         self.assertEqual(state["installed_models"], [])
+
+    def test_cleanup_scan_reports_orphans_without_deleting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            orphan = self.write_blob(root, "sha256:" + "b" * 64, b"orphan")
+            base_url = self.start_server(tmp)
+
+            status, payload = self.request_json(f"{base_url}/api/cleanup/scan", method="POST", body={})
+            orphan_exists = orphan.exists()
+
+        self.assertEqual(status, 200)
+        self.assertTrue(orphan_exists)
+        self.assertTrue(payload["dry_run"])
+        self.assertEqual(payload["orphan_blob_count"], 1)
+        self.assertEqual(payload["deleted"], [])
+
+    def test_cleanup_delete_recomputes_and_removes_orphans(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            orphan = self.write_blob(root, "sha256:" + "b" * 64, b"orphan")
+            base_url = self.start_server(tmp)
+
+            status, payload = self.request_json(
+                f"{base_url}/api/cleanup/delete",
+                method="POST",
+                body={"include_partials": False, "older_than_days": 7},
+            )
+
+        self.assertEqual(status, 200)
+        self.assertFalse(orphan.exists())
+        self.assertFalse(payload["dry_run"])
+        self.assertEqual(payload["deleted"], [str(orphan)])
+
+    def test_cleanup_delete_respects_partial_options(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old_partial = self.write_blob(root, "sha256:" + "c" * 64, b"old", suffix=".manual-download")
+            fresh_partial = self.write_blob(root, "sha256:" + "d" * 64, b"fresh", suffix=".manual-download")
+            old_time = time.time() - (8 * 24 * 60 * 60)
+            os.utime(old_partial, (old_time, old_time))
+            base_url = self.start_server(tmp)
+
+            status, payload = self.request_json(
+                f"{base_url}/api/cleanup/delete",
+                method="POST",
+                body={"include_partials": True, "older_than_days": 7},
+            )
+            old_partial_exists = old_partial.exists()
+            fresh_partial_exists = fresh_partial.exists()
+
+        self.assertEqual(status, 200)
+        self.assertFalse(old_partial_exists)
+        self.assertTrue(fresh_partial_exists)
+        self.assertEqual(payload["stale_partial_count"], 1)
+        self.assertEqual(payload["deleted"], [str(old_partial)])
+
+    def write_blob(self, root: Path, digest: str, content: bytes, *, suffix: str = "") -> Path:
+        blob = root / "blobs" / (digest.replace(":", "-") + suffix)
+        blob.parent.mkdir(parents=True, exist_ok=True)
+        blob.write_bytes(content)
+        return blob
 
     def test_search_endpoint_url_decodes_query(self):
         with tempfile.TemporaryDirectory() as tmp:

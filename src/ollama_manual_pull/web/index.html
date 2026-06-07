@@ -33,6 +33,18 @@
       <section aria-labelledby="installed-heading">
         <div class="section-title" id="installed-heading">Installed models</div>
         <div id="installed" class="installed-list"></div>
+        <div class="cleanup-panel" aria-labelledby="cleanup-heading">
+          <div class="section-title" id="cleanup-heading">Shard cleanup</div>
+          <div class="cleanup-controls">
+            <button id="cleanup-scan" type="button">Scan Orphan Shards</button>
+            <label class="checkbox-row">
+              <input id="cleanup-partials" type="checkbox">
+              <span>Include stale partials</span>
+            </label>
+            <button id="cleanup-delete" class="danger" type="button" disabled>Delete Orphan Shards</button>
+          </div>
+          <div id="cleanup-results" class="cleanup-results muted" aria-live="polite"></div>
+        </div>
       </section>
 
       <section aria-labelledby="active-heading">

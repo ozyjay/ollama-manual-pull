@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from .core import DEFAULT_REGISTRY, default_models_dir
+from .core import DEFAULT_REGISTRY, cleanup_orphan_blobs, default_models_dir
 from .queue import DownloadQueue
 from .search import search_models
 
@@ -76,6 +76,29 @@ class AppRequestHandler(BaseHTTPRequestHandler):
                 self.server.queue.delete_installed_model(model)
                 self._send_json({"ok": True})
                 return
+            if path == "/api/cleanup/scan":
+                payload = self._read_optional_json_body()
+                include_partials, older_than_days = self._cleanup_options(payload)
+                self._send_json(
+                    cleanup_orphan_blobs(
+                        self.server.queue.models_dir,
+                        include_partials=include_partials,
+                        older_than_days=older_than_days,
+                    )
+                )
+                return
+            if path == "/api/cleanup/delete":
+                payload = self._read_optional_json_body()
+                include_partials, older_than_days = self._cleanup_options(payload)
+                self._send_json(
+                    cleanup_orphan_blobs(
+                        self.server.queue.models_dir,
+                        delete=True,
+                        include_partials=include_partials,
+                        older_than_days=older_than_days,
+                    )
+                )
+                return
             if path.startswith("/api/retry/"):
                 item_id = unquote(path.removeprefix("/api/retry/"))
                 self._send_json(self.server.queue.retry(item_id))
@@ -109,6 +132,27 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         if not isinstance(payload, dict):
             raise ValueError("Expected JSON object")
         return payload
+
+    def _read_optional_json_body(self) -> dict[str, Any]:
+        length = int(self.headers.get("Content-Length", "0"))
+        if length <= 0:
+            return {}
+        body = self.rfile.read(length)
+        if not body:
+            return {}
+        payload = json.loads(body.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("Expected JSON object")
+        return payload
+
+    def _cleanup_options(self, payload: dict[str, Any]) -> tuple[bool, int]:
+        include_partials = payload.get("include_partials", False)
+        older_than_days = payload.get("older_than_days", 7)
+        if not isinstance(include_partials, bool):
+            raise ValueError("Expected include_partials to be a boolean")
+        if not isinstance(older_than_days, int) or older_than_days < 0:
+            raise ValueError("Expected older_than_days to be a non-negative integer")
+        return include_partials, older_than_days
 
     def _send_json(self, payload: Any, *, status: int = 200) -> None:
         body = json.dumps(payload).encode("utf-8")

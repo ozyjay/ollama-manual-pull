@@ -44,14 +44,30 @@ struct APIClient {
         try await request("/api/installed/remove", method: "POST", json: ["model": model.name])
     }
 
-    private func request<T: Decodable>(_ path: String, method: String = "GET", json: [String: String]? = nil) async throws -> T {
+    func scanCleanup(includePartials: Bool, olderThanDays: Int = 7) async throws -> CleanupReport {
+        try await request(
+            "/api/cleanup/scan",
+            method: "POST",
+            json: ["include_partials": includePartials, "older_than_days": olderThanDays]
+        )
+    }
+
+    func deleteCleanupCandidates(includePartials: Bool, olderThanDays: Int = 7) async throws -> CleanupReport {
+        try await request(
+            "/api/cleanup/delete",
+            method: "POST",
+            json: ["include_partials": includePartials, "older_than_days": olderThanDays]
+        )
+    }
+
+    private func request<T: Decodable>(_ path: String, method: String = "GET", json: [String: Any]? = nil) async throws -> T {
         guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
             throw APIError(message: "Local app server is not ready.")
         }
         return try await request(url, method: method, json: json)
     }
 
-    private func request<T: Decodable>(_ url: URL, method: String = "GET", json: [String: String]? = nil) async throws -> T {
+    private func request<T: Decodable>(_ url: URL, method: String = "GET", json: [String: Any]? = nil) async throws -> T {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")

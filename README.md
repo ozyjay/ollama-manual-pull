@@ -41,9 +41,14 @@ ollama-manual-pull --dry-run qwen3-coder:30b
 ollama-manual-pull --models-dir /path/to/models qwen3-coder:30b
 ollama-manual-pull --registry https://registry.ollama.ai qwen3-coder:30b
 ollama-manual-pull --resume-from ~/.ollama/models/blobs/sha256-...-partial qwen3-coder:30b
+ollama-manual-pull gc
+ollama-manual-pull gc --delete
+ollama-manual-pull gc --delete --include-partials --older-than-days 7
 ```
 
 By default, models are written to `$OLLAMA_MODELS` when set, otherwise `~/.ollama/models`.
+
+`gc` scans installed manifests and reports blob shards that are not referenced by any model. It is a dry run unless `--delete` is passed. Partial download files are preserved unless `--include-partials` is explicitly set, and then only stale partials older than `--older-than-days` are included.
 
 ## Web UI
 

@@ -2,7 +2,9 @@ import base64
 import hashlib
 import io
 import json
+import os
 import tempfile
+import time
 import unittest
 import urllib.error
 from pathlib import Path
@@ -168,6 +170,133 @@ class OllamaManualPullTests(unittest.TestCase):
                 },
             ],
         )
+
+    def test_cleanup_reports_orphan_blobs_and_keeps_referenced_blobs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            referenced_digest = "sha256:" + "a" * 64
+            orphan_digest = "sha256:" + "b" * 64
+            self.write_manifest(root, referenced_digest)
+            referenced = self.write_blob(root, referenced_digest, b"referenced")
+            orphan = self.write_blob(root, orphan_digest, b"orphan")
+
+            report = omp.cleanup_orphan_blobs(root)
+
+            self.assertEqual(report["referenced_count"], 1)
+            self.assertEqual(report["orphan_blob_count"], 1)
+            self.assertEqual(report["orphan_blob_bytes"], len(b"orphan"))
+            self.assertEqual([item["path"] for item in report["orphan_blobs"]], [str(orphan)])
+            self.assertEqual(report["stale_partial_count"], 0)
+            self.assertEqual(report["deleted"], [])
+            self.assertTrue(referenced.exists())
+            self.assertTrue(orphan.exists())
+
+    def test_cleanup_delete_removes_only_orphan_blobs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            referenced_digest = "sha256:" + "a" * 64
+            orphan_digest = "sha256:" + "b" * 64
+            self.write_manifest(root, referenced_digest)
+            referenced = self.write_blob(root, referenced_digest, b"referenced")
+            orphan = self.write_blob(root, orphan_digest, b"orphan")
+
+            report = omp.cleanup_orphan_blobs(root, delete=True)
+
+            self.assertEqual(report["deleted"], [str(orphan)])
+            self.assertTrue(referenced.exists())
+            self.assertFalse(orphan.exists())
+
+    def test_cleanup_excludes_partials_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            partial_digest = "sha256:" + "c" * 64
+            partial = self.write_blob(root, partial_digest, b"partial", suffix=".manual-download")
+
+            report = omp.cleanup_orphan_blobs(root)
+
+            self.assertEqual(report["orphan_blob_count"], 0)
+            self.assertEqual(report["stale_partial_count"], 0)
+            self.assertEqual(report["skipped_partial_count"], 1)
+            self.assertEqual([item["path"] for item in report["skipped_partials"]], [str(partial)])
+            self.assertTrue(partial.exists())
+
+    def test_cleanup_includes_only_stale_partials_when_requested(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old_digest = "sha256:" + "c" * 64
+            fresh_digest = "sha256:" + "d" * 64
+            old_partial = self.write_blob(root, old_digest, b"old", suffix=".manual-download")
+            fresh_partial = self.write_blob(root, fresh_digest, b"fresh", suffix=".manual-download")
+            old_time = time.time() - (8 * 24 * 60 * 60)
+            os.utime(old_partial, (old_time, old_time))
+
+            report = omp.cleanup_orphan_blobs(root, include_partials=True, older_than_days=7)
+
+            self.assertEqual(report["stale_partial_count"], 1)
+            self.assertEqual(report["stale_partial_bytes"], len(b"old"))
+            self.assertEqual([item["path"] for item in report["stale_partials"]], [str(old_partial)])
+            self.assertEqual([item["path"] for item in report["skipped_partials"]], [str(fresh_partial)])
+            self.assertTrue(old_partial.exists())
+            self.assertTrue(fresh_partial.exists())
+
+    def test_cleanup_invalid_manifest_aborts_without_deleting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = root / "manifests" / "registry.ollama.ai" / "library" / "broken" / "latest"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text("{not json")
+            orphan_digest = "sha256:" + "b" * 64
+            orphan = self.write_blob(root, orphan_digest, b"orphan")
+
+            with self.assertRaisesRegex(RuntimeError, "Could not parse manifest"):
+                omp.cleanup_orphan_blobs(root, delete=True)
+
+            self.assertTrue(orphan.exists())
+
+    def test_gc_cli_dry_run_reports_orphans_without_deleting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            orphan_digest = "sha256:" + "b" * 64
+            orphan = self.write_blob(root, orphan_digest, b"orphan")
+            output = io.StringIO()
+
+            with mock.patch("sys.stdout", output):
+                exit_code = omp.main(["gc", "--models-dir", str(root)])
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue(orphan.exists())
+            self.assertIn("Dry run", output.getvalue())
+            self.assertIn("Orphan complete blobs: 1", output.getvalue())
+
+    def test_gc_cli_delete_removes_orphans(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            orphan_digest = "sha256:" + "b" * 64
+            orphan = self.write_blob(root, orphan_digest, b"orphan")
+            output = io.StringIO()
+
+            with mock.patch("sys.stdout", output):
+                exit_code = omp.main(["gc", "--models-dir", str(root), "--delete"])
+
+            self.assertEqual(exit_code, 0)
+            self.assertFalse(orphan.exists())
+            self.assertIn("Deleted files: 1", output.getvalue())
+
+    def write_manifest(self, root: Path, *digests: str) -> Path:
+        manifest = root / "manifests" / "registry.ollama.ai" / "library" / "model" / "latest"
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "config": {"digest": digests[0]},
+            "layers": [{"digest": digest} for digest in digests[1:]],
+        }
+        manifest.write_text(json.dumps(payload) + "\n")
+        return manifest
+
+    def write_blob(self, root: Path, digest: str, content: bytes, *, suffix: str = "") -> Path:
+        blob = root / "blobs" / (omp.digest_filename(digest) + suffix)
+        blob.parent.mkdir(parents=True, exist_ok=True)
+        blob.write_bytes(content)
+        return blob
 
     def test_verify_file_matches_sha256_digest(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -160,6 +160,66 @@ struct SearchVariant: Decodable, Identifiable {
     }
 }
 
+struct CleanupReport: Decodable {
+    let dryRun: Bool
+    let includePartials: Bool
+    let olderThanDays: Int
+    let referencedCount: Int
+    let orphanBlobCount: Int
+    let orphanBlobBytes: Double
+    let stalePartialCount: Int
+    let stalePartialBytes: Double
+    let skippedPartialCount: Int
+    let skippedPartialBytes: Double
+    let orphanBlobs: [CleanupFile]
+    let stalePartials: [CleanupFile]
+    let skippedPartials: [CleanupFile]
+    let deleted: [String]
+    let warnings: [String]
+
+    var candidateCount: Int {
+        orphanBlobCount + stalePartialCount
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case dryRun = "dry_run"
+        case includePartials = "include_partials"
+        case olderThanDays = "older_than_days"
+        case referencedCount = "referenced_count"
+        case orphanBlobCount = "orphan_blob_count"
+        case orphanBlobBytes = "orphan_blob_bytes"
+        case stalePartialCount = "stale_partial_count"
+        case stalePartialBytes = "stale_partial_bytes"
+        case skippedPartialCount = "skipped_partial_count"
+        case skippedPartialBytes = "skipped_partial_bytes"
+        case orphanBlobs = "orphan_blobs"
+        case stalePartials = "stale_partials"
+        case skippedPartials = "skipped_partials"
+        case deleted
+        case warnings
+    }
+}
+
+struct CleanupFile: Decodable, Identifiable {
+    let path: String
+    let name: String
+    let digest: String
+    let size: Double
+    let modifiedAt: Double
+    let type: String
+
+    var id: String { path }
+
+    enum CodingKeys: String, CodingKey {
+        case path
+        case name
+        case digest
+        case size
+        case modifiedAt = "modified_at"
+        case type
+    }
+}
+
 struct APIErrorBody: Decodable {
     let error: String?
 }

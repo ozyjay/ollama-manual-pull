@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import struct
 import sys
@@ -25,6 +26,8 @@ DEFAULT_REGISTRY = "https://registry.ollama.ai"
 DEFAULT_HOST = "registry.ollama.ai"
 ProgressCallback = Callable[[dict[str, Any]], None]
 StopAfterBlobCallback = Callable[[], bool]
+SHA256_FILE_RE = re.compile(r"^sha256-([a-fA-F0-9]{64})$")
+SHA256_IN_NAME_RE = re.compile(r"sha256[-:]([a-fA-F0-9]{64})")
 ED25519_P = 2**255 - 19
 ED25519_Q = 2**252 + 27742317777372353535851937790883648493
 ED25519_D = -121665 * pow(121666, ED25519_P - 2, ED25519_P) % ED25519_P
@@ -434,6 +437,102 @@ def delete_installed_model(root: Path, model: str, host: str = DEFAULT_HOST) -> 
         current = current.parent
 
 
+def cleanup_orphan_blobs(
+    root: Path,
+    *,
+    delete: bool = False,
+    include_partials: bool = False,
+    older_than_days: int = 7,
+) -> dict[str, Any]:
+    root = Path(root)
+    referenced = referenced_manifest_digests(root)
+    blobs_dir = root / "blobs"
+    orphan_blobs: list[dict[str, Any]] = []
+    stale_partials: list[dict[str, Any]] = []
+    skipped_partials: list[dict[str, Any]] = []
+    deleted: list[str] = []
+    warnings: list[str] = []
+    stale_before = time.time() - max(0, older_than_days) * 24 * 60 * 60
+
+    if blobs_dir.is_dir():
+        for path in sorted(blobs_dir.iterdir(), key=lambda candidate: candidate.name):
+            if not path.is_file():
+                continue
+            final_match = SHA256_FILE_RE.fullmatch(path.name)
+            if final_match:
+                digest = f"sha256:{final_match.group(1).lower()}"
+                if digest not in referenced:
+                    orphan_blobs.append(cleanup_file_item(path, digest=digest, kind="blob"))
+                continue
+
+            partial_match = SHA256_IN_NAME_RE.search(path.name)
+            if not partial_match:
+                continue
+            digest = f"sha256:{partial_match.group(1).lower()}"
+            item = cleanup_file_item(path, digest=digest, kind="partial")
+            if digest in referenced:
+                skipped_partials.append(item)
+            elif include_partials and path.stat().st_mtime <= stale_before:
+                stale_partials.append(item)
+            else:
+                skipped_partials.append(item)
+
+    delete_candidates = [*orphan_blobs, *stale_partials]
+    if delete:
+        for item in delete_candidates:
+            path = Path(item["path"])
+            try:
+                path.unlink()
+                deleted.append(str(path))
+            except FileNotFoundError:
+                warnings.append(f"Already gone: {path}")
+
+    return {
+        "dry_run": not delete,
+        "include_partials": include_partials,
+        "older_than_days": older_than_days,
+        "referenced_count": len(referenced),
+        "orphan_blob_count": len(orphan_blobs),
+        "orphan_blob_bytes": sum(item["size"] for item in orphan_blobs),
+        "stale_partial_count": len(stale_partials),
+        "stale_partial_bytes": sum(item["size"] for item in stale_partials),
+        "skipped_partial_count": len(skipped_partials),
+        "skipped_partial_bytes": sum(item["size"] for item in skipped_partials),
+        "orphan_blobs": orphan_blobs,
+        "stale_partials": stale_partials,
+        "skipped_partials": skipped_partials,
+        "deleted": deleted,
+        "warnings": warnings,
+    }
+
+
+def referenced_manifest_digests(root: Path) -> set[str]:
+    manifests = Path(root) / "manifests"
+    if not manifests.is_dir():
+        return set()
+
+    referenced: set[str] = set()
+    for manifest_path in sorted(path for path in manifests.rglob("*") if path.is_file()):
+        try:
+            manifest = json.loads(manifest_path.read_text())
+            referenced.update(manifest_digests(manifest))
+        except (OSError, KeyError, TypeError, json.JSONDecodeError) as error:
+            raise RuntimeError(f"Could not parse manifest {manifest_path}: {error}") from error
+    return referenced
+
+
+def cleanup_file_item(path: Path, *, digest: str, kind: str) -> dict[str, Any]:
+    stat = path.stat()
+    return {
+        "path": str(path),
+        "name": path.name,
+        "digest": digest,
+        "size": stat.st_size,
+        "modified_at": stat.st_mtime,
+        "type": kind,
+    }
+
+
 def manifest_digests(manifest: dict[str, Any]) -> list[str]:
     digests = [manifest["config"]["digest"]]
     digests.extend(layer["digest"] for layer in manifest.get("layers", []))
@@ -732,9 +831,67 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_gc_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Remove Ollama blob shards not referenced by installed manifests.")
+    parser.add_argument("command", choices=["gc"])
+    parser.add_argument("--models-dir", type=Path, default=default_models_dir())
+    parser.add_argument("--delete", action="store_true", help="Delete candidates. Defaults to dry-run.")
+    parser.add_argument(
+        "--include-partials",
+        action="store_true",
+        help="Include stale partial download files in cleanup candidates.",
+    )
+    parser.add_argument(
+        "--older-than-days",
+        type=int,
+        default=7,
+        help="Minimum age for partial download cleanup when --include-partials is set.",
+    )
+    return parser
+
+
+def print_cleanup_report(report: dict[str, Any]) -> None:
+    mode = "Dry run" if report["dry_run"] else "Deleted"
+    print(f"{mode}: orphan shard cleanup", flush=True)
+    print(f"Referenced blobs: {report['referenced_count']}", flush=True)
+    print(
+        f"Orphan complete blobs: {report['orphan_blob_count']} "
+        f"({format_size(report['orphan_blob_bytes'])})",
+        flush=True,
+    )
+    print(
+        f"Stale partial downloads: {report['stale_partial_count']} "
+        f"({format_size(report['stale_partial_bytes'])})",
+        flush=True,
+    )
+    print(f"Skipped partial downloads: {report['skipped_partial_count']}", flush=True)
+    print(f"Deleted files: {len(report['deleted'])}", flush=True)
+    if report["dry_run"]:
+        print("Re-run with --delete to remove listed complete orphan blobs.", flush=True)
+    for warning in report["warnings"]:
+        print(f"Warning: {warning}", flush=True)
+
+
 def main(argv: list[str] | None = None) -> int:
+    raw_args = list(sys.argv[1:] if argv is None else argv)
+    if raw_args[:1] == ["gc"]:
+        parser = build_gc_parser()
+        args = parser.parse_args(raw_args)
+        try:
+            report = cleanup_orphan_blobs(
+                args.models_dir.expanduser(),
+                delete=args.delete,
+                include_partials=args.include_partials,
+                older_than_days=args.older_than_days,
+            )
+            print_cleanup_report(report)
+        except Exception as error:
+            print(f"Error: {error}", file=sys.stderr, flush=True)
+            return 1
+        return 0
+
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(raw_args)
     try:
         pull_model(
             args.model,
