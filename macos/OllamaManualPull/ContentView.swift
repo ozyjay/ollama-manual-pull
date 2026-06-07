@@ -1,7 +1,16 @@
+import AppKit
 import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var inspectorWidth: CGFloat = 300
+    @State private var inspectorDragStartWidth: CGFloat?
+
+    private let sidebarWidth: CGFloat = 190
+    private let resizeHandleWidth: CGFloat = 7
+    private let minInspectorWidth: CGFloat = 240
+    private let maxInspectorWidth: CGFloat = 520
+    private let minMainContentWidth: CGFloat = 360
 
     var body: some View {
         VStack(spacing: 0) {
@@ -11,25 +20,55 @@ struct ContentView: View {
                 ErrorBanner(message: appError)
             }
 
-            HStack(spacing: 0) {
-                SidebarView()
-                    .frame(width: 190)
+            GeometryReader { geometry in
+                HStack(spacing: 0) {
+                    SidebarView()
+                        .frame(width: sidebarWidth)
 
-                Divider()
+                    Divider()
 
-                mainContent
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    mainContent
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                Divider()
+                    InspectorResizeHandle()
+                        .frame(width: resizeHandleWidth)
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { value in
+                                    let startWidth = inspectorDragStartWidth ?? inspectorWidth
+                                    if inspectorDragStartWidth == nil {
+                                        inspectorDragStartWidth = inspectorWidth
+                                    }
+                                    inspectorWidth = clampedInspectorWidth(
+                                        startWidth - value.translation.width,
+                                        totalWidth: geometry.size.width
+                                    )
+                                }
+                                .onEnded { value in
+                                    let startWidth = inspectorDragStartWidth ?? inspectorWidth
+                                    inspectorWidth = clampedInspectorWidth(
+                                        startWidth - value.translation.width,
+                                        totalWidth: geometry.size.width
+                                    )
+                                    inspectorDragStartWidth = nil
+                                }
+                        )
 
-                InspectorView()
-                    .frame(width: 300)
+                    InspectorView()
+                        .frame(width: clampedInspectorWidth(inspectorWidth, totalWidth: geometry.size.width))
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()
             BottomCommandBar()
         }
+    }
+
+    private func clampedInspectorWidth(_ width: CGFloat, totalWidth: CGFloat) -> CGFloat {
+        let availableWidth = totalWidth - sidebarWidth - resizeHandleWidth - minMainContentWidth
+        let effectiveMaxWidth = max(minInspectorWidth, min(maxInspectorWidth, availableWidth))
+        return min(max(width, minInspectorWidth), effectiveMaxWidth)
     }
 
     @ViewBuilder
@@ -42,6 +81,35 @@ struct ContentView: View {
         case .installed:
             InstalledModelsView()
         }
+    }
+}
+
+private struct InspectorResizeHandle: View {
+    @State private var isHovering = false
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color(nsColor: .windowBackgroundColor))
+
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(width: 1)
+
+            Capsule()
+                .fill(Color.accentColor.opacity(isHovering ? 0.55 : 0))
+                .frame(width: 3)
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovering = hovering
+            if hovering {
+                NSCursor.resizeLeftRight.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+        .accessibilityLabel("Resize inspector")
     }
 }
 

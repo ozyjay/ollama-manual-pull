@@ -160,6 +160,16 @@ class MacOSAppBuilderTests(unittest.TestCase):
             )
             self.assertTrue(bundled_nested_source.is_file())
 
+    def test_native_content_view_uses_resizable_inspector_split(self):
+        content_source = (build_macos_app.NATIVE_APP_SOURCE_DIR / "ContentView.swift").read_text()
+
+        self.assertIn("@State private var inspectorWidth: CGFloat = 300", content_source)
+        self.assertIn("InspectorResizeHandle", content_source)
+        self.assertIn("DragGesture(minimumDistance: 0)", content_source)
+        self.assertIn("private func clampedInspectorWidth", content_source)
+        self.assertIn("NSCursor.resizeLeftRight", content_source)
+        self.assertNotIn("InspectorView()\n                    .frame(width: 300)", content_source)
+
     def test_install_app_copies_bundle_to_applications_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
