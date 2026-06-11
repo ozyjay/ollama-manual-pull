@@ -18,6 +18,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 NATIVE_APP_SOURCE_DIR = PROJECT_ROOT / "macos" / "OllamaManualPull"
 
 
+def default_applications_dir() -> Path:
+    return Path.home() / "Applications"
+
+
 def build_app(
     *,
     output_dir: Path = PROJECT_ROOT / "dist",
@@ -48,8 +52,10 @@ def build_app(
 def install_app(
     app_path: Path,
     *,
-    applications_dir: Path = Path("/Applications"),
+    applications_dir: Path | None = None,
 ) -> Path:
+    if applications_dir is None:
+        applications_dir = default_applications_dir()
     destination = applications_dir / app_path.name
     applications_dir.mkdir(parents=True, exist_ok=True)
     if destination.exists():
@@ -61,8 +67,10 @@ def install_app(
 def install_app_with_admin_prompt(
     app_path: Path,
     *,
-    applications_dir: Path = Path("/Applications"),
+    applications_dir: Path | None = None,
 ) -> Path:
+    if applications_dir is None:
+        applications_dir = default_applications_dir()
     destination = applications_dir / app_path.name
     command = " && ".join(
         [
@@ -320,11 +328,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build the macOS app bundle.")
     parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "dist")
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
-    parser.add_argument("--install", action="store_true", help="Copy the app to Applications after building.")
+    parser.add_argument("--install", action="store_true", help="Copy the app to ~/Applications after building.")
     parser.add_argument(
         "--applications-dir",
         type=Path,
-        default=Path("/Applications"),
+        default=default_applications_dir(),
         help="Applications directory to use with --install.",
     )
     args = parser.parse_args(argv)

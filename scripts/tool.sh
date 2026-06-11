@@ -17,7 +17,7 @@ Commands:
   test             Run the Python test suite
   build            Build build/Ollama Manual Pull.app
   run-app          Build if needed, then open the app from build/
-  install          Build and install the app into /Applications
+  install          Build and install the app into ~/Applications
   install-cli      Install the CLI and web entry points in editable mode
   run-web          Run the local web UI
   pull             Run the CLI downloader; pass a model ref and options
