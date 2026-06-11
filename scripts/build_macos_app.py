@@ -61,6 +61,7 @@ def install_app(
     if destination.exists():
         shutil.rmtree(destination)
     shutil.copytree(app_path, destination)
+    destination.touch()
     return destination
 
 
@@ -97,6 +98,7 @@ def _write_info_plist(path: Path) -> None:
         "CFBundleDisplayName": APP_NAME,
         "CFBundleExecutable": APP_NAME,
         "CFBundleIconFile": "AppIcon",
+        "CFBundleIconName": "AppIcon",
         "CFBundleIdentifier": "local.ollama-manual-pull",
         "CFBundleInfoDictionaryVersion": "6.0",
         "CFBundleName": APP_NAME,
@@ -114,9 +116,13 @@ def _write_app_icon(resources: Path) -> None:
         "icp4": 16,
         "icp5": 32,
         "icp6": 64,
+        "ic11": 32,
+        "ic12": 64,
         "ic07": 128,
         "ic08": 256,
+        "ic13": 256,
         "ic09": 512,
+        "ic14": 512,
         "ic10": 1024,
     }
     _write_icns(resources / "AppIcon.icns", {kind: _render_icon_png(size) for kind, size in icon_sizes.items()})

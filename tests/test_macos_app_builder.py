@@ -1,11 +1,24 @@
+import os
 import plistlib
 import shutil
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from scripts import build_macos_app
+
+
+def _icns_chunk_types(path: Path) -> list[str]:
+    data = path.read_bytes()
+    chunks = []
+    index = 8
+    while index < len(data):
+        chunks.append(data[index : index + 4].decode("ascii"))
+        chunk_size = int.from_bytes(data[index + 4 : index + 8], "big")
+        index += chunk_size
+    return chunks
 
 
 class MacOSAppBuilderTests(unittest.TestCase):
@@ -33,6 +46,9 @@ class MacOSAppBuilderTests(unittest.TestCase):
             self.assertFalse((resources / "NativeApp.swift").exists())
             self.assertTrue((resources / "AppIcon.icns").is_file())
             self.assertEqual((resources / "AppIcon.icns").read_bytes()[:4], b"icns")
+            icon_chunks = _icns_chunk_types(resources / "AppIcon.icns")
+            self.assertIn("ic11", icon_chunks)
+            self.assertIn("ic12", icon_chunks)
             self.assertTrue((resources / "AppIcon.svg").is_file())
             self.assertTrue((resources / "src" / "ollama_manual_pull" / "server.py").is_file())
             self.assertTrue((resources / "src" / "ollama_manual_pull" / "web" / "app.js").is_file())
@@ -43,6 +59,7 @@ class MacOSAppBuilderTests(unittest.TestCase):
             self.assertEqual(plist["CFBundleName"], "Ollama Manual Pull")
             self.assertEqual(plist["CFBundleExecutable"], "Ollama Manual Pull")
             self.assertEqual(plist["CFBundleIconFile"], "AppIcon")
+            self.assertEqual(plist["CFBundleIconName"], "AppIcon")
 
             combined_source = "\n".join(path.read_text() for path in sorted(source_dir.rglob("*.swift")))
             self.assertIn("/Users/example/.pyenv/versions/3.12.13/bin/python3", combined_source)
@@ -189,6 +206,24 @@ class MacOSAppBuilderTests(unittest.TestCase):
             self.assertTrue((installed / "Contents" / "Resources" / "AppIcon.icns").is_file())
             self.assertTrue((installed / "Contents" / "MacOS" / "Ollama Manual Pull").is_file())
             self.assertFalse((installed / "stale.txt").exists())
+
+    def test_install_app_touches_copied_bundle_to_refresh_finder_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            app_path = build_macos_app.build_app(
+                output_dir=root / "dist",
+                python_executable=Path("/Users/example/.pyenv/versions/3.12.13/bin/python3"),
+            )
+            old_time = 1_700_000_000
+            app_path.touch()
+            (app_path / "Contents").touch()
+            time.sleep(0.01)
+            before_install = time.time()
+            os.utime(app_path, (old_time, old_time))
+
+            installed = build_macos_app.install_app(app_path, applications_dir=root / "Applications")
+
+            self.assertGreaterEqual(installed.stat().st_mtime, before_install)
 
     def test_main_prompts_for_admin_install_when_explicit_applications_copy_is_denied(self):
         app_path = Path("/tmp/Ollama Manual Pull.app")
