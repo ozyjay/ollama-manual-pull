@@ -441,6 +441,18 @@ class DownloadQueueTests(unittest.TestCase):
         self.assertTrue(second["deduplicated"])
         self.assertEqual(len(snapshot["items"]), 1)
 
+    def test_add_keeps_namespaced_and_library_models_separate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = DownloadQueue(models_dir=Path(tmp), pull_func=lambda *args, **kwargs: None)
+
+            library = queue.add("qwen3.5")
+            namespaced = queue.add("mlx-community/qwen3.5")
+            snapshot = queue.snapshot()
+
+        self.assertEqual(library["canonical_model"], "qwen3.5:latest")
+        self.assertEqual(namespaced["canonical_model"], "mlx-community/qwen3.5:latest")
+        self.assertEqual(len(snapshot["items"]), 2)
+
     def test_add_returns_failed_duplicate_without_adding_row(self):
         def fake_pull(model, **kwargs):
             raise RuntimeError("download broke")

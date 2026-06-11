@@ -60,6 +60,8 @@ ollamapull-web
 
 The web UI runs on `127.0.0.1`, queues one model download at a time, and preserves the same safety behavior as the CLI downloader. Search is best effort; direct model references such as `qwen3-coder:30b` always remain supported.
 
+The search source picker includes the official Ollama library and MLX Community namespace presets. Direct namespaced references such as `mlx-community/model:tag` can also be pasted and queued manually.
+
 ## Logs
 
 The CLI, web UI, and macOS app write diagnostic logs to:

@@ -5,6 +5,10 @@ const state = {
   selectedId: null,
   searchResults: [],
   searchBusy: false,
+  sources: [
+    { id: "library", label: "Official", namespace: "library" },
+    { id: "mlx-community", label: "MLX Community", namespace: "mlx-community" },
+  ],
   cleanupReport: null,
 };
 
@@ -12,6 +16,7 @@ const elements = {
   target: document.getElementById("target"),
   appError: document.getElementById("app-error"),
   searchForm: document.getElementById("search-form"),
+  sourceSelect: document.getElementById("source-select"),
   modelInput: document.getElementById("model-input"),
   addDirect: document.getElementById("add-direct"),
   searchStatus: document.getElementById("search-status"),
@@ -250,6 +255,23 @@ function variantLabel(variant) {
   return variant?.label || variantName(variant);
 }
 
+function selectedSource() {
+  const sourceId = elements.sourceSelect?.value || "library";
+  return state.sources.find((source) => source.id === sourceId) || state.sources[0];
+}
+
+function renderSources() {
+  const sources = Array.isArray(state.snapshot?.sources) && state.snapshot.sources.length
+    ? state.snapshot.sources
+    : state.sources;
+  const previous = elements.sourceSelect.value || "library";
+  state.sources = sources;
+  elements.sourceSelect.innerHTML = sources
+    .map((source) => `<option value="${escapeHtml(source.id)}">${escapeHtml(source.label)}</option>`)
+    .join("");
+  elements.sourceSelect.value = sources.some((source) => source.id === previous) ? previous : sources[0]?.id || "library";
+}
+
 function renderTarget() {
   const snapshot = state.snapshot;
   const modelsDir = snapshot?.models_dir || "Waiting for server state";
@@ -273,7 +295,8 @@ function renderSearchResults() {
     return;
   }
 
-  elements.searchStatus.textContent = `${state.searchResults.length} official result${state.searchResults.length === 1 ? "" : "s"}. Choose a version to queue.`;
+  const label = selectedSource()?.label || "Official";
+  elements.searchStatus.textContent = `${state.searchResults.length} ${label} result${state.searchResults.length === 1 ? "" : "s"}. Choose a version to queue.`;
   elements.searchResults.innerHTML = state.searchResults
     .map((result, index) => {
       const name = queueableName(result);
@@ -527,6 +550,7 @@ function renderControls() {
 }
 
 function renderState() {
+  renderSources();
   renderTarget();
   renderInstalled();
   renderActive();
@@ -578,7 +602,8 @@ async function searchModels(query) {
   elements.searchResults.innerHTML = "";
   renderSearchResults();
   try {
-    const payload = await api(`/api/search?q=${encodeURIComponent(trimmed)}`);
+    const sourceId = elements.sourceSelect.value || "library";
+    const payload = await api(`/api/search?q=${encodeURIComponent(trimmed)}&source=${encodeURIComponent(sourceId)}`);
     state.searchResults = Array.isArray(payload?.results) ? payload.results : [];
     if (payload?.available === false && payload?.error) {
       elements.searchStatus.textContent = payload.error;
@@ -603,6 +628,12 @@ elements.searchForm.addEventListener("submit", (event) => {
 
 elements.addDirect.addEventListener("click", () => {
   queueModel(elements.modelInput.value);
+});
+
+elements.sourceSelect.addEventListener("change", () => {
+  state.searchResults = [];
+  elements.searchStatus.textContent = "";
+  renderSearchResults();
 });
 
 elements.searchResults.addEventListener("click", (event) => {

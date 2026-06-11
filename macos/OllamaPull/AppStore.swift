@@ -4,6 +4,7 @@ import Foundation
 final class AppStore: ObservableObject {
     @Published var snapshot: AppSnapshot?
     @Published var selectedId: String?
+    @Published var selectedSourceId = "library"
     @Published var searchText = ""
     @Published var searchResults: [SearchResult] = []
     @Published var searchStatus = ""
@@ -20,6 +21,21 @@ final class AppStore: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var refreshInFlight = false
     private var refreshPending = false
+
+    var availableSources: [ModelSource] {
+        let sources = snapshot?.sources ?? []
+        if sources.isEmpty {
+            return [
+                ModelSource(id: "library", label: "Official", namespace: "library"),
+                ModelSource(id: "mlx-community", label: "MLX Community", namespace: "mlx-community"),
+            ]
+        }
+        return sources
+    }
+
+    var selectedSourceLabel: String {
+        availableSources.first { $0.id == selectedSourceId }?.label ?? "Official"
+    }
 
     var selectedItem: QueueItem? {
         snapshot?.items.first { $0.id == selectedId }
@@ -97,6 +113,7 @@ final class AppStore: ObservableObject {
                 let next = try await apiClient.state()
                 snapshot = next
                 reconcileSelection(with: next)
+                reconcileSource(with: next)
                 clearStateRefreshError()
             } catch {
                 if isCancellation(error) || Task.isCancelled { break }
@@ -121,14 +138,15 @@ final class AppStore: ObservableObject {
         searchStatus = "Searching..."
         defer { isSearching = false }
         do {
-            let payload = try await apiClient.search(trimmed)
+            let sourceLabel = selectedSourceLabel
+            let payload = try await apiClient.search(trimmed, sourceId: selectedSourceId)
             searchResults = payload.results
             if payload.available == false, let error = payload.error {
                 searchStatus = error
             } else if payload.results.isEmpty {
                 searchStatus = "No matching models found."
             } else {
-                searchStatus = "\(payload.results.count) official result\(payload.results.count == 1 ? "" : "s"). Choose a version to queue."
+                searchStatus = "\(payload.results.count) \(sourceLabel) result\(payload.results.count == 1 ? "" : "s"). Choose a version to queue."
             }
             clearActionError(prefix: "Search failed:")
         } catch {
@@ -312,6 +330,14 @@ final class AppStore: ObservableObject {
             return
         }
         selectedId = snapshot.items.first(where: { $0.status == "running" })?.id ?? snapshot.items.first?.id
+    }
+
+    private func reconcileSource(with snapshot: AppSnapshot) {
+        guard !snapshot.sources.isEmpty else { return }
+        if snapshot.sources.contains(where: { $0.id == selectedSourceId }) {
+            return
+        }
+        selectedSourceId = snapshot.sources.first?.id ?? "library"
     }
 
     private func normalizedModelRef(_ value: String) -> String {

@@ -54,6 +54,13 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(payload["items"], [])
         self.assertEqual(payload["models_dir"], tmp)
+        self.assertEqual(
+            payload["sources"],
+            [
+                {"id": "library", "label": "Official", "namespace": "library"},
+                {"id": "mlx-community", "label": "MLX Community", "namespace": "mlx-community"},
+            ],
+        )
 
     def test_add_endpoint_queues_model(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -200,7 +207,31 @@ class ServerTests(unittest.TestCase):
 
         self.assertEqual(status, 200)
         self.assertEqual(payload["results"], [{"name": "qwen"}])
-        search_models.assert_called_once_with("qwen coder")
+        search_models.assert_called_once_with("qwen coder", source_id="library")
+
+    def test_search_endpoint_passes_selected_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base_url = self.start_server(tmp)
+
+            with mock.patch.object(
+                server_module,
+                "search_models",
+                return_value={"available": True, "results": [{"name": "mlx-community/qwen"}], "error": None},
+            ) as search_models:
+                status, payload = self.request_json(f"{base_url}/api/search?q=qwen&source=mlx-community")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["results"], [{"name": "mlx-community/qwen"}])
+        search_models.assert_called_once_with("qwen", source_id="mlx-community")
+
+    def test_search_endpoint_rejects_unknown_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base_url = self.start_server(tmp)
+
+            status, payload = self.request_error_json(f"{base_url}/api/search?q=qwen&source=unknown")
+
+        self.assertEqual(status, 400)
+        self.assertIn("Unknown source", payload["error"])
 
     def test_bad_queue_body_returns_json_error_status_400(self):
         with tempfile.TemporaryDirectory() as tmp:
