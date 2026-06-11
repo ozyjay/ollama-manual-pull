@@ -15,7 +15,6 @@ from .core import (
     parse_model_ref,
     pull_model,
 )
-from .sources import model_sources
 
 
 PullFunc = Callable[..., None]
@@ -156,7 +155,6 @@ class DownloadQueue:
                 "models_dir": str(self.models_dir),
                 "registry": self.registry,
                 "retries": self.retries,
-                "sources": model_sources(),
                 "installed_models": installed_models(self.models_dir),
                 "items": [self._copy_item(item) for item in self._items],
             }

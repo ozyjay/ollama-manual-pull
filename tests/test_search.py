@@ -3,7 +3,6 @@ from unittest import mock
 
 from ollama_pull.search import (
     fetch_search_html,
-    fetch_tag_html,
     parse_search_results,
     parse_tag_results,
     search_models,
@@ -49,16 +48,13 @@ class SearchTests(unittest.TestCase):
 
         self.assertEqual([result["name"] for result in results], ["qwen3-coder"])
 
-    def test_parse_search_results_extracts_namespaced_model_links(self):
+    def test_parse_search_results_ignores_namespaced_model_links(self):
         results = parse_search_results(
             '<a href="/QwertyMcQwertz/MutualistLLM">'
             "<h2>MutualistLLM</h2><p>Community model</p></a>"
         )
 
-        self.assertEqual(results[0]["name"], "QwertyMcQwertz/MutualistLLM")
-        self.assertEqual(results[0]["namespace"], "QwertyMcQwertz")
-        self.assertEqual(results[0]["model"], "MutualistLLM")
-        self.assertEqual(results[0]["description"], "Community model")
+        self.assertEqual(results, [])
 
     def test_parse_tag_results_extracts_official_model_variants(self):
         results = parse_tag_results(
@@ -79,50 +75,6 @@ class SearchTests(unittest.TestCase):
                 {"name": "qwen3-coder:480b", "label": "480b"},
             ],
         )
-
-    def test_parse_tag_results_extracts_namespaced_model_variants(self):
-        results = parse_tag_results(
-            """
-            <a href="/mlx-community/qwen3.5:122b-a10b-mlx-int4">variant</a>
-            <a href="/library/qwen3.5:latest">official variant</a>
-            """,
-            source_id="mlx-community",
-        )
-
-        self.assertEqual(
-            results,
-            [
-                {
-                    "name": "mlx-community/qwen3.5:122b-a10b-mlx-int4",
-                    "label": "122b-a10b-mlx-int4",
-                },
-            ],
-        )
-
-    def test_search_models_filters_and_prefixes_namespaced_source_results(self):
-        search_page = """
-            <a href="/library/qwen3-coder"><h2>qwen3-coder</h2></a>
-            <a href="/mlx-community/qwen3.5"><h2>qwen3.5</h2><p>MLX model</p></a>
-        """
-        tags_page = """
-            <a href="/mlx-community/qwen3.5:122b-a10b-mlx-int4">variant</a>
-        """
-
-        with (
-            mock.patch("ollama_pull.search.fetch_search_html", return_value=search_page),
-            mock.patch("ollama_pull.search.fetch_tag_html", return_value=tags_page) as fetch_tags,
-        ):
-            payload = search_models("qwen", source_id="mlx-community")
-
-        self.assertTrue(payload["available"])
-        self.assertEqual(len(payload["results"]), 1)
-        self.assertEqual(payload["results"][0]["name"], "mlx-community/qwen3.5")
-        self.assertEqual(payload["results"][0]["source"], "mlx-community")
-        self.assertEqual(
-            payload["results"][0]["variants"],
-            [{"name": "mlx-community/qwen3.5:122b-a10b-mlx-int4", "label": "122b-a10b-mlx-int4"}],
-        )
-        fetch_tags.assert_called_once_with("mlx-community/qwen3.5")
 
     def test_search_models_adds_variants_for_official_results(self):
         pages = {
@@ -230,21 +182,6 @@ class SearchTests(unittest.TestCase):
 
         self.assertEqual(page, "search page")
         urlopen.assert_called_once_with("https://ollama.com/search?q=qwen+coder", timeout=15)
-
-    def test_fetch_tag_html_uses_namespaced_path(self):
-        response = mock.Mock()
-        response.read.return_value = b"tags page"
-        response.__enter__ = mock.Mock(return_value=response)
-        response.__exit__ = mock.Mock(return_value=None)
-
-        with mock.patch("ollama_pull.search.urlopen", return_value=response) as urlopen:
-            page = fetch_tag_html("mlx-community/qwen3.5")
-
-        self.assertEqual(page, "tags page")
-        urlopen.assert_called_once_with(
-            "https://ollama.com/mlx-community/qwen3.5/tags",
-            timeout=15,
-        )
 
 
 if __name__ == "__main__":

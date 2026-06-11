@@ -13,7 +13,6 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from .core import DEFAULT_REGISTRY, cleanup_orphan_blobs, default_models_dir
 from .queue import DownloadQueue
 from .search import search_models
-from .sources import source_by_id
 
 
 WEB_DIR = Path(__file__).with_name("web")
@@ -40,14 +39,8 @@ class AppRequestHandler(BaseHTTPRequestHandler):
             self._send_json(self.server.queue.snapshot())
             return
         if path == "/api/search":
-            query_params = parse_qs(urlsplit(self.path).query)
-            query = query_params.get("q", [""])[0]
-            source_id = query_params.get("source", ["library"])[0]
-            try:
-                source_by_id(source_id)
-                self._send_json(search_models(query, source_id=source_id))
-            except ValueError as error:
-                self._send_api_error(str(error), status=400)
+            query = parse_qs(urlsplit(self.path).query).get("q", [""])[0]
+            self._send_json(search_models(query))
             return
         if path.startswith("/api/"):
             self._send_api_error("Unknown API route", status=404)

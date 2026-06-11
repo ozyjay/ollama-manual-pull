@@ -31,15 +31,7 @@ struct SearchView: View {
 
     private var searchBar: some View {
         HStack(spacing: 10) {
-            Picker("Source", selection: $store.selectedSourceId) {
-                ForEach(store.availableSources) { source in
-                    Text(source.label).tag(source.id)
-                }
-            }
-            .labelsHidden()
-            .frame(width: 150)
-
-            TextField("Search models or paste a model reference", text: $store.searchText)
+            TextField("Search official models or paste a model reference", text: $store.searchText)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit {
                     Task { await store.search() }

@@ -7,7 +7,6 @@ struct AppSnapshot: Decodable {
     let modelsDir: String
     let registry: String
     let retries: Int
-    let sources: [ModelSource]
     let installedModels: [InstalledModel]
     let items: [QueueItem]
 
@@ -18,16 +17,9 @@ struct AppSnapshot: Decodable {
         case modelsDir = "models_dir"
         case registry
         case retries
-        case sources
         case installedModels = "installed_models"
         case items
     }
-}
-
-struct ModelSource: Decodable, Identifiable, Hashable {
-    let id: String
-    let label: String
-    let namespace: String
 }
 
 struct InstalledModel: Decodable, Identifiable {

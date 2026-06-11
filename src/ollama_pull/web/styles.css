@@ -32,8 +32,7 @@ body {
 }
 
 button,
-input,
-select {
+input {
   font: inherit;
 }
 
@@ -77,8 +76,7 @@ button.small {
   font-size: 12px;
 }
 
-input,
-select {
+input {
   min-width: 0;
   width: 100%;
   min-height: 38px;
@@ -95,7 +93,6 @@ input[type="checkbox"] {
 }
 
 input:focus,
-select:focus,
 button:focus-visible {
   outline: 2px solid rgba(37, 99, 235, 0.25);
   outline-offset: 2px;
@@ -199,7 +196,7 @@ h2 {
 
 .search-form {
   display: grid;
-  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
 }
 

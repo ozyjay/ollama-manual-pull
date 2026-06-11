@@ -7,12 +7,9 @@ struct APIClient {
         try await request("/api/state")
     }
 
-    func search(_ query: String, sourceId: String) async throws -> SearchResponse {
+    func search(_ query: String) async throws -> SearchResponse {
         var components = URLComponents(url: baseURL.appendingPathComponent("api/search"), resolvingAgainstBaseURL: false)
-        components?.queryItems = [
-            URLQueryItem(name: "q", value: query),
-            URLQueryItem(name: "source", value: sourceId),
-        ]
+        components?.queryItems = [URLQueryItem(name: "q", value: query)]
         guard let url = components?.url else {
             throw APIError(message: "Could not build search URL.")
         }
