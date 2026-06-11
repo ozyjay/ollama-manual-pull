@@ -1,4 +1,4 @@
-# ollama-manual-pull
+# OllamaPull
 
 Download and register Ollama models manually, without relying on `ollama pull`.
 
@@ -9,14 +9,14 @@ This is useful when `ollama pull` fails partway through a model download or exit
 Run from the repo:
 
 ```bash
-PYTHONPATH=src python3 -m ollama_manual_pull qwen3-coder:30b
+PYTHONPATH=src python3 -m ollama_pull qwen3-coder:30b
 ```
 
 Or install it in editable mode:
 
 ```bash
 python3 -m pip install -e .
-ollama-manual-pull qwen3-coder:30b
+ollamapull qwen3-coder:30b
 ```
 
 The Ollama app/server does not need to be running while this tool downloads. After it finishes, start Ollama and check:
@@ -37,13 +37,13 @@ Resuming at: 16.7GB
 ## Options
 
 ```bash
-ollama-manual-pull --dry-run qwen3-coder:30b
-ollama-manual-pull --models-dir /path/to/models qwen3-coder:30b
-ollama-manual-pull --registry https://registry.ollama.ai qwen3-coder:30b
-ollama-manual-pull --resume-from ~/.ollama/models/blobs/sha256-...-partial qwen3-coder:30b
-ollama-manual-pull gc
-ollama-manual-pull gc --delete
-ollama-manual-pull gc --delete --include-partials --older-than-days 7
+ollamapull --dry-run qwen3-coder:30b
+ollamapull --models-dir /path/to/models qwen3-coder:30b
+ollamapull --registry https://registry.ollama.ai qwen3-coder:30b
+ollamapull --resume-from ~/.ollama/models/blobs/sha256-...-partial qwen3-coder:30b
+ollamapull gc
+ollamapull gc --delete
+ollamapull gc --delete --include-partials --older-than-days 7
 ```
 
 By default, models are written to `$OLLAMA_MODELS` when set, otherwise `~/.ollama/models`.
@@ -55,7 +55,7 @@ By default, models are written to `$OLLAMA_MODELS` when set, otherwise `~/.ollam
 Launch the local browser UI:
 
 ```bash
-ollama-manual-pull-web
+ollamapull-web
 ```
 
 The web UI runs on `127.0.0.1`, queues one model download at a time, and preserves the same safety behavior as the CLI downloader. Search is best effort; direct model references such as `qwen3-coder:30b` always remain supported.
@@ -65,7 +65,7 @@ The web UI runs on `127.0.0.1`, queues one model download at a time, and preserv
 The CLI, web UI, and macOS app write diagnostic logs to:
 
 ```text
-~/Library/Logs/Ollama Manual Pull/app.log
+~/Library/Logs/OllamaPull/app.log
 ```
 
 Set `OLLAMA_MANUAL_PULL_LOG_FILE=/path/to/app.log` to use a different log file.
@@ -76,14 +76,14 @@ Build a native local `.app` bundle:
 
 ```bash
 python3 scripts/build_macos_app.py
-open "dist/Ollama Manual Pull.app"
+open "dist/OllamaPull.app"
 ```
 
 Install it into your user Applications folder:
 
 ```bash
 python3 scripts/build_macos_app.py --install
-open "$HOME/Applications/Ollama Manual Pull.app"
+open "$HOME/Applications/OllamaPull.app"
 ```
 
 The app opens its own native macOS window and starts the local Python server in the background. It does not open a separate browser tab or embed the browser UI. The builder bakes in the Python interpreter used to run the build command, which works well with `pyenv` because Finder-launched apps do not inherit your shell setup. If that interpreter is unavailable later, the app falls back to common `pyenv`, Homebrew, and system `python3` paths.
@@ -117,6 +117,6 @@ The runner writes app bundles to `build/` so it does not collide with existing `
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
-python3 -m py_compile src/ollama_manual_pull/*.py tests/*.py
-node --check src/ollama_manual_pull/web/app.js
+python3 -m py_compile src/ollama_pull/*.py tests/*.py
+node --check src/ollama_pull/web/app.js
 ```

@@ -13,9 +13,9 @@ import zlib
 from pathlib import Path
 
 
-APP_NAME = "Ollama Manual Pull"
+APP_NAME = "OllamaPull"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-NATIVE_APP_SOURCE_DIR = PROJECT_ROOT / "macos" / "OllamaManualPull"
+NATIVE_APP_SOURCE_DIR = PROJECT_ROOT / "macos" / "OllamaPull"
 
 
 def default_applications_dir() -> Path:
@@ -43,7 +43,7 @@ def build_app(
 
     _write_app_icon(resources)
     _write_info_plist(contents / "Info.plist")
-    native_source_dir = resources / "macos" / "OllamaManualPull"
+    native_source_dir = resources / "macos" / "OllamaPull"
     _write_native_sources(native_source_dir, python_executable)
     _compile_native_app(sorted(native_source_dir.rglob("*.swift")), macos / APP_NAME)
     return app_path
@@ -99,7 +99,7 @@ def _write_info_plist(path: Path) -> None:
         "CFBundleExecutable": APP_NAME,
         "CFBundleIconFile": "AppIcon",
         "CFBundleIconName": "AppIcon",
-        "CFBundleIdentifier": "local.ollama-manual-pull",
+        "CFBundleIdentifier": "local.ollamapull",
         "CFBundleInfoDictionaryVersion": "6.0",
         "CFBundleName": APP_NAME,
         "CFBundlePackageType": "APPL",
@@ -311,7 +311,7 @@ def _swift_string_literal(value: Path) -> str:
 
 
 def _compile_native_app(sources: list[Path], executable: Path) -> None:
-    with tempfile.TemporaryDirectory(prefix="ollama-manual-pull-swift-cache-") as module_cache:
+    with tempfile.TemporaryDirectory(prefix="ollamapull-swift-cache-") as module_cache:
         subprocess.run(
             [
                 "swiftc",

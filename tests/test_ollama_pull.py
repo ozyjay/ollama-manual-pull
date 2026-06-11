@@ -10,11 +10,11 @@ import urllib.error
 from pathlib import Path
 from unittest import mock
 
-import ollama_manual_pull as omp
-import ollama_manual_pull.core as core
+import ollama_pull as omp
+import ollama_pull.core as core
 
 
-class OllamaManualPullTests(unittest.TestCase):
+class OllamaPullTests(unittest.TestCase):
     def test_parse_model_ref_defaults_latest_tag_and_library_namespace(self):
         ref = omp.parse_model_ref("qwen3-coder")
 
@@ -38,7 +38,7 @@ class OllamaManualPullTests(unittest.TestCase):
             io.BytesIO(b"this model requires macOS"),
         )
 
-        with mock.patch("ollama_manual_pull.core.registry_urlopen", side_effect=error):
+        with mock.patch("ollama_pull.core.registry_urlopen", side_effect=error):
             with self.assertRaisesRegex(RuntimeError, "HTTP 412.*this model requires macOS"):
                 core.fetch_json(error.url, retries=0)
 
@@ -71,10 +71,10 @@ class OllamaManualPullTests(unittest.TestCase):
         public_key = core.ed25519_public_key(seed)
 
         with (
-            mock.patch("ollama_manual_pull.core.default_ollama_identity", return_value=(seed, public_key)),
-            mock.patch("ollama_manual_pull.core.time.time", return_value=1_700_000_000),
-            mock.patch("ollama_manual_pull.core.platform.machine", return_value="arm64"),
-            mock.patch("ollama_manual_pull.core.sys.platform", "darwin"),
+            mock.patch("ollama_pull.core.default_ollama_identity", return_value=(seed, public_key)),
+            mock.patch("ollama_pull.core.time.time", return_value=1_700_000_000),
+            mock.patch("ollama_pull.core.platform.machine", return_value="arm64"),
+            mock.patch("ollama_pull.core.sys.platform", "darwin"),
         ):
             request = core.registry_request("https://registry.ollama.ai/v2/library/qwen3.6/manifests/27b")
 

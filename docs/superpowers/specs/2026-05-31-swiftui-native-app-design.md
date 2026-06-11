@@ -2,7 +2,7 @@
 
 ## Context
 
-`ollama-manual-pull` now has a native multi-file SwiftUI macOS app that talks to a local Python HTTP server. The Python downloader continues to handle the safety-critical behavior: resumable downloads, SHA-256 verification, blob reuse, and manifest installation after all referenced blobs verify.
+`ollamapull` now has a native multi-file SwiftUI macOS app that talks to a local Python HTTP server. The Python downloader continues to handle the safety-critical behavior: resumable downloads, SHA-256 verification, blob reuse, and manifest installation after all referenced blobs verify.
 
 This migration was driven by several sharp edges in the previous generated native app:
 
@@ -56,9 +56,9 @@ The queue list should preserve scroll position and selection during refreshes. R
 
 ## Architecture
 
-The macOS app should be split into focused Swift files under `macos/OllamaManualPull/`:
+The macOS app should be split into focused Swift files under `macos/OllamaPull/`:
 
-- `OllamaManualPullApp.swift`: app entry point, scene setup, command menus.
+- `OllamaPullApp.swift`: app entry point, scene setup, command menus.
 - `PythonServerSupervisor.swift`: launches and terminates the bundled Python server.
 - `AppStore.swift`: observable application state, selection, refresh scheduling, and user actions.
 - `APIClient.swift`: typed HTTP client for the local API.

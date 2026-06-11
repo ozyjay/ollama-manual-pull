@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ollama-manual-pull"
+name = "ollamapull"
 version = "0.1.0"
 description = "Manually download and register Ollama models from the registry."
 readme = "README.md"
@@ -18,8 +18,8 @@ classifiers = [
 ]
 
 [project.scripts]
-ollama-manual-pull = "ollama_manual_pull:main"
-ollama-manual-pull-web = "ollama_manual_pull:run_web"
+ollamapull = "ollama_pull:main"
+ollamapull-web = "ollama_pull:run_web"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -28,4 +28,4 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-ollama_manual_pull = ["web/*"]
+ollama_pull = ["web/*"]

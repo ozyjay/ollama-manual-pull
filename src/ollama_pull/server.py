@@ -202,7 +202,7 @@ def create_server(
 
 
 def run_web(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run the Ollama Manual Pull web app.")
+    parser = argparse.ArgumentParser(description="Run the OllamaPull web app.")
     parser.add_argument("--models-dir", type=Path, default=default_models_dir())
     parser.add_argument("--registry", default=DEFAULT_REGISTRY)
     parser.add_argument("--retries", type=int, default=12)
@@ -216,7 +216,7 @@ def run_web(argv: list[str] | None = None) -> int:
     )
     host, port = httpd.server_address
     url = f"http://{host}:{port}/"
-    print(f"Ollama Manual Pull web app: {url}", flush=True)
+    print(f"OllamaPull web app: {url}", flush=True)
     webbrowser.open(url)
     try:
         httpd.serve_forever()

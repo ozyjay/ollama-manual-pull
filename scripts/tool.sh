@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PYTHON="${PYTHON:-python3}"
-APP_NAME="Ollama Manual Pull.app"
+APP_NAME="OllamaPull.app"
 BUILD_DIR="${ROOT_DIR}/build"
 APP_PATH="${BUILD_DIR}/${APP_NAME}"
 
@@ -15,7 +15,7 @@ Usage:
 
 Commands:
   test             Run the Python test suite
-  build            Build build/Ollama Manual Pull.app
+  build            Build build/OllamaPull.app
   run-app          Build if needed, then open the app from build/
   install          Build and install the app into ~/Applications
   install-cli      Install the CLI and web entry points in editable mode
@@ -82,12 +82,12 @@ case "${command}" in
   run-web)
     need_python
     cd "${ROOT_DIR}"
-    PYTHONPATH=src "${PYTHON}" -c 'from ollama_manual_pull import run_web; raise SystemExit(run_web())' "$@"
+    PYTHONPATH=src "${PYTHON}" -c 'from ollama_pull import run_web; raise SystemExit(run_web())' "$@"
     ;;
   pull)
     need_python
     cd "${ROOT_DIR}"
-    PYTHONPATH=src "${PYTHON}" -m ollama_manual_pull "$@"
+    PYTHONPATH=src "${PYTHON}" -m ollama_pull "$@"
     ;;
   clean)
     rm -rf "${ROOT_DIR}/dist"

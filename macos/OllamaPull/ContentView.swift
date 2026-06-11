@@ -119,7 +119,7 @@ private struct HeaderView: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Ollama Manual Pull")
+                Text("OllamaPull")
                     .font(.title3.weight(.semibold))
                 HStack(spacing: 8) {
                     Circle()

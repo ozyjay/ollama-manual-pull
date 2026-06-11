@@ -1,7 +1,7 @@
 import unittest
 from unittest import mock
 
-from ollama_manual_pull.search import (
+from ollama_pull.search import (
     fetch_search_html,
     parse_search_results,
     parse_tag_results,
@@ -87,9 +87,9 @@ class SearchTests(unittest.TestCase):
         }
 
         with (
-            mock.patch("ollama_manual_pull.search.fetch_search_html", return_value=pages["qwen"]),
+            mock.patch("ollama_pull.search.fetch_search_html", return_value=pages["qwen"]),
             mock.patch(
-                "ollama_manual_pull.search.fetch_tag_html",
+                "ollama_pull.search.fetch_tag_html",
                 side_effect=lambda model: pages[model],
             ),
         ):
@@ -149,7 +149,7 @@ class SearchTests(unittest.TestCase):
 
     def test_search_models_returns_unavailable_on_network_failure(self):
         with mock.patch(
-            "ollama_manual_pull.search.fetch_search_html", side_effect=OSError("offline")
+            "ollama_pull.search.fetch_search_html", side_effect=OSError("offline")
         ):
             payload = search_models("qwen")
 
@@ -159,9 +159,9 @@ class SearchTests(unittest.TestCase):
 
     def test_search_models_returns_unavailable_on_parse_failure(self):
         with (
-            mock.patch("ollama_manual_pull.search.fetch_search_html", return_value="<html>"),
+            mock.patch("ollama_pull.search.fetch_search_html", return_value="<html>"),
             mock.patch(
-                "ollama_manual_pull.search.parse_search_results",
+                "ollama_pull.search.parse_search_results",
                 side_effect=ValueError("parse failed"),
             ),
         ):
@@ -177,7 +177,7 @@ class SearchTests(unittest.TestCase):
         response.__enter__ = mock.Mock(return_value=response)
         response.__exit__ = mock.Mock(return_value=None)
 
-        with mock.patch("ollama_manual_pull.search.urlopen", return_value=response) as urlopen:
+        with mock.patch("ollama_pull.search.urlopen", return_value=response) as urlopen:
             page = fetch_search_html("qwen coder")
 
         self.assertEqual(page, "search page")

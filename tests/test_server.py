@@ -9,7 +9,7 @@ import urllib.request
 from pathlib import Path
 from unittest import mock
 
-from ollama_manual_pull import server as server_module
+from ollama_pull import server as server_module
 
 
 class ServerTests(unittest.TestCase):
@@ -267,15 +267,18 @@ class ServerTests(unittest.TestCase):
         content = pyproject.read_text()
 
         self.assertIn("[tool.setuptools.package-data]", content)
-        self.assertIn('ollama_manual_pull = ["web/*"]', content)
+        self.assertIn('name = "ollamapull"', content)
+        self.assertIn('ollamapull = "ollama_pull:main"', content)
+        self.assertIn('ollamapull-web = "ollama_pull:run_web"', content)
+        self.assertIn('ollama_pull = ["web/*"]', content)
         for asset in ["index.html", "styles.css", "app.js"]:
-            self.assertTrue((project_root / "src" / "ollama_manual_pull" / "web" / asset).is_file())
+            self.assertTrue((project_root / "src" / "ollama_pull" / "web" / asset).is_file())
 
     def test_web_progress_summary_uses_overall_speed_and_eta(self):
         app_js = (
             Path(__file__).resolve().parents[1]
             / "src"
-            / "ollama_manual_pull"
+            / "ollama_pull"
             / "web"
             / "app.js"
         ).read_text()

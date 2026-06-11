@@ -1,6 +1,0 @@
-import Foundation
-
-enum AppConfig {
-    static let bundledPython = %%PYTHON_EXECUTABLE%%
-    static let serverCommand = "from ollama_manual_pull.server import create_server; from ollama_manual_pull.core import default_models_dir; httpd = create_server(('127.0.0.1', 0), models_dir=default_models_dir()); host, port = httpd.server_address; print(f'URL=http://{host}:{port}/', flush=True); httpd.serve_forever()"
-}

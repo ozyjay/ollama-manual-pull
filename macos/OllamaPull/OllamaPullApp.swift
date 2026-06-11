@@ -2,13 +2,13 @@ import AppKit
 import SwiftUI
 
 @main
-struct OllamaManualPullApp: App {
+struct OllamaPullApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = AppStore()
     @StateObject private var supervisor = PythonServerSupervisor()
 
     var body: some Scene {
-        WindowGroup("Ollama Manual Pull") {
+        WindowGroup("OllamaPull") {
             ContentView()
                 .environmentObject(store)
                 .frame(minWidth: 1040, minHeight: 700)
@@ -28,7 +28,7 @@ struct OllamaManualPullApp: App {
             CommandGroup(replacing: .newItem) {}
 
             CommandGroup(replacing: .appTermination) {
-                Button("Quit Ollama Manual Pull") {
+                Button("Quit OllamaPull") {
                     NSApplication.shared.terminate(nil)
                 }
                 .keyboardShortcut("q", modifiers: .command)

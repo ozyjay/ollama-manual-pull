@@ -2,7 +2,7 @@
 
 ## Context
 
-`ollama-manual-pull` is currently a small Python command-line tool that manually downloads and registers Ollama models from a registry. It already handles the important safety behavior: resumable blob downloads, SHA-256 verification, existing blob reuse, and manifest installation only after all referenced blobs verify.
+`ollamapull` is currently a small Python command-line tool that manually downloads and registers Ollama models from a registry. It already handles the important safety behavior: resumable blob downloads, SHA-256 verification, existing blob reuse, and manifest installation only after all referenced blobs verify.
 
 The new feature is a local web app that turns the downloader into a visual queue tool. It should preserve the existing downloader behavior and make it easier to discover models, queue downloads, inspect progress, and recover from failures.
 
@@ -77,13 +77,13 @@ Suggested modules:
 The existing CLI should continue to work. A new command or option can launch the web UI, for example:
 
 ```bash
-ollama-manual-pull-web
+ollamapull-web
 ```
 
 or:
 
 ```bash
-ollama-manual-pull --web
+ollamapull --web
 ```
 
 The implementation should choose whichever fits the package cleanly.

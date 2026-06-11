@@ -12,16 +12,16 @@
 
 ## File Structure
 
-- Modify `src/ollama_manual_pull/core.py`: add optional progress callbacks while preserving the existing CLI output.
-- Create `src/ollama_manual_pull/queue.py`: queue item dataclasses, state transitions, single-worker orchestration, and retry/remove controls.
-- Create `src/ollama_manual_pull/search.py`: best-effort public Ollama search page parsing.
-- Create `src/ollama_manual_pull/server.py`: local HTTP API and static web app launcher.
-- Create `src/ollama_manual_pull/web/index.html`: Operator Panel UI shell.
-- Create `src/ollama_manual_pull/web/styles.css`: layout and component styling.
-- Create `src/ollama_manual_pull/web/app.js`: client-side polling, rendering, search, and queue actions.
-- Modify `src/ollama_manual_pull/__init__.py`: export new public entry points.
-- Modify `src/ollama_manual_pull/__main__.py`: keep CLI behavior and route `--web` through the web launcher.
-- Modify `pyproject.toml`: add `ollama-manual-pull-web` console script.
+- Modify `src/ollama_pull/core.py`: add optional progress callbacks while preserving the existing CLI output.
+- Create `src/ollama_pull/queue.py`: queue item dataclasses, state transitions, single-worker orchestration, and retry/remove controls.
+- Create `src/ollama_pull/search.py`: best-effort public Ollama search page parsing.
+- Create `src/ollama_pull/server.py`: local HTTP API and static web app launcher.
+- Create `src/ollama_pull/web/index.html`: Operator Panel UI shell.
+- Create `src/ollama_pull/web/styles.css`: layout and component styling.
+- Create `src/ollama_pull/web/app.js`: client-side polling, rendering, search, and queue actions.
+- Modify `src/ollama_pull/__init__.py`: export new public entry points.
+- Modify `src/ollama_pull/__main__.py`: keep CLI behavior and route `--web` through the web launcher.
+- Modify `pyproject.toml`: add `ollamapull-web` console script.
 - Add `tests/test_queue.py`: queue state and one-active-worker behavior.
 - Add `tests/test_search.py`: saved HTML parsing and failure behavior.
 - Add `tests/test_server.py`: API route smoke tests.
@@ -29,12 +29,12 @@
 ## Task 1: Add Progress Events To Core Downloader
 
 **Files:**
-- Modify: `src/ollama_manual_pull/core.py`
-- Modify: `tests/test_ollama_manual_pull.py`
+- Modify: `src/ollama_pull/core.py`
+- Modify: `tests/test_ollama_pull.py`
 
 - [ ] **Step 1: Write tests for progress callbacks**
 
-Add these tests to `tests/test_ollama_manual_pull.py`:
+Add these tests to `tests/test_ollama_pull.py`:
 
 ```python
     def test_download_blob_reports_existing_blob_progress(self):
@@ -90,14 +90,14 @@ Add these tests to `tests/test_ollama_manual_pull.py`:
 Run:
 
 ```bash
-PYTHONPATH=src python3 -m unittest tests.test_ollama_manual_pull -v
+PYTHONPATH=src python3 -m unittest tests.test_ollama_pull -v
 ```
 
 Expected: failure because `download_blob()` and `pull_model()` do not accept `progress`.
 
 - [ ] **Step 3: Implement progress callback support**
 
-In `src/ollama_manual_pull/core.py`, add:
+In `src/ollama_pull/core.py`, add:
 
 ```python
 ProgressCallback = Any
@@ -186,7 +186,7 @@ Pass `progress=progress` into `download_blob()`. Emit after manifest installatio
 Run:
 
 ```bash
-PYTHONPATH=src python3 -m unittest tests.test_ollama_manual_pull -v
+PYTHONPATH=src python3 -m unittest tests.test_ollama_pull -v
 ```
 
 Expected: all tests pass.
@@ -194,14 +194,14 @@ Expected: all tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ollama_manual_pull/core.py tests/test_ollama_manual_pull.py
+git add src/ollama_pull/core.py tests/test_ollama_pull.py
 git commit -m "Add downloader progress events"
 ```
 
 ## Task 2: Implement Single-Worker Queue Manager
 
 **Files:**
-- Create: `src/ollama_manual_pull/queue.py`
+- Create: `src/ollama_pull/queue.py`
 - Create: `tests/test_queue.py`
 
 - [ ] **Step 1: Write queue tests**
@@ -215,7 +215,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ollama_manual_pull.queue import DownloadQueue
+from ollama_pull.queue import DownloadQueue
 
 
 class DownloadQueueTests(unittest.TestCase):
@@ -292,11 +292,11 @@ Run:
 PYTHONPATH=src python3 -m unittest tests.test_queue -v
 ```
 
-Expected: import failure because `ollama_manual_pull.queue` does not exist.
+Expected: import failure because `ollama_pull.queue` does not exist.
 
 - [ ] **Step 3: Implement queue manager**
 
-Create `src/ollama_manual_pull/queue.py`:
+Create `src/ollama_pull/queue.py`:
 
 ```python
 from __future__ import annotations
@@ -465,14 +465,14 @@ Expected: all queue tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ollama_manual_pull/queue.py tests/test_queue.py
+git add src/ollama_pull/queue.py tests/test_queue.py
 git commit -m "Add single worker download queue"
 ```
 
 ## Task 3: Add Best-Effort Model Search
 
 **Files:**
-- Create: `src/ollama_manual_pull/search.py`
+- Create: `src/ollama_pull/search.py`
 - Create: `tests/test_search.py`
 
 - [ ] **Step 1: Write search tests**
@@ -483,7 +483,7 @@ Create `tests/test_search.py`:
 import unittest
 from unittest import mock
 
-from ollama_manual_pull.search import parse_search_results, search_models
+from ollama_pull.search import parse_search_results, search_models
 
 
 SAMPLE_HTML = """
@@ -511,7 +511,7 @@ class SearchTests(unittest.TestCase):
         self.assertEqual(results[1]["name"], "deepseek-r1")
 
     def test_search_models_returns_unavailable_on_network_failure(self):
-        with mock.patch("ollama_manual_pull.search.fetch_search_html", side_effect=OSError("offline")):
+        with mock.patch("ollama_pull.search.fetch_search_html", side_effect=OSError("offline")):
             payload = search_models("qwen")
 
         self.assertFalse(payload["available"])
@@ -527,11 +527,11 @@ Run:
 PYTHONPATH=src python3 -m unittest tests.test_search -v
 ```
 
-Expected: import failure because `ollama_manual_pull.search` does not exist.
+Expected: import failure because `ollama_pull.search` does not exist.
 
 - [ ] **Step 3: Implement search helper**
 
-Create `src/ollama_manual_pull/search.py`:
+Create `src/ollama_pull/search.py`:
 
 ```python
 from __future__ import annotations
@@ -597,16 +597,16 @@ Expected: all search tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ollama_manual_pull/search.py tests/test_search.py
+git add src/ollama_pull/search.py tests/test_search.py
 git commit -m "Add best effort model search"
 ```
 
 ## Task 4: Add Local HTTP Server API
 
 **Files:**
-- Create: `src/ollama_manual_pull/server.py`
+- Create: `src/ollama_pull/server.py`
 - Create: `tests/test_server.py`
-- Modify: `src/ollama_manual_pull/__init__.py`
+- Modify: `src/ollama_pull/__init__.py`
 - Modify: `pyproject.toml`
 
 - [ ] **Step 1: Write server tests**
@@ -620,7 +620,7 @@ import unittest
 import urllib.request
 from pathlib import Path
 
-from ollama_manual_pull.server import create_server
+from ollama_pull.server import create_server
 
 
 class ServerTests(unittest.TestCase):
@@ -662,11 +662,11 @@ Run:
 PYTHONPATH=src python3 -m unittest tests.test_server -v
 ```
 
-Expected: import failure because `ollama_manual_pull.server` does not exist.
+Expected: import failure because `ollama_pull.server` does not exist.
 
 - [ ] **Step 3: Implement server API**
 
-Create `src/ollama_manual_pull/server.py`:
+Create `src/ollama_pull/server.py`:
 
 ```python
 from __future__ import annotations
@@ -765,7 +765,7 @@ def create_server(address: tuple[str, int], *, models_dir: Path, registry: str =
 def run_web(argv: list[str] | None = None) -> int:
     server = create_server(("127.0.0.1", 0), models_dir=default_models_dir())
     url = f"http://127.0.0.1:{server.server_port}/"
-    print(f"Ollama Manual Pull web app: {url}", flush=True)
+    print(f"OllamaPull web app: {url}", flush=True)
     webbrowser.open(url)
     try:
         server.serve_forever()
@@ -776,7 +776,7 @@ def run_web(argv: list[str] | None = None) -> int:
     return 0
 ```
 
-Update `src/ollama_manual_pull/__init__.py`:
+Update `src/ollama_pull/__init__.py`:
 
 ```python
 from .core import (
@@ -803,8 +803,8 @@ Update `pyproject.toml`:
 
 ```toml
 [project.scripts]
-ollama-manual-pull = "ollama_manual_pull:main"
-ollama-manual-pull-web = "ollama_manual_pull:run_web"
+ollamapull = "ollama_pull:main"
+ollamapull-web = "ollama_pull:run_web"
 ```
 
 - [ ] **Step 4: Run tests to verify pass**
@@ -820,20 +820,20 @@ Expected: all server tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ollama_manual_pull/server.py src/ollama_manual_pull/__init__.py pyproject.toml tests/test_server.py
+git add src/ollama_pull/server.py src/ollama_pull/__init__.py pyproject.toml tests/test_server.py
 git commit -m "Add local web server API"
 ```
 
 ## Task 5: Build Operator Panel Web UI
 
 **Files:**
-- Create: `src/ollama_manual_pull/web/index.html`
-- Create: `src/ollama_manual_pull/web/styles.css`
-- Create: `src/ollama_manual_pull/web/app.js`
+- Create: `src/ollama_pull/web/index.html`
+- Create: `src/ollama_pull/web/styles.css`
+- Create: `src/ollama_pull/web/app.js`
 
 - [ ] **Step 1: Create UI shell**
 
-Create `src/ollama_manual_pull/web/index.html`:
+Create `src/ollama_pull/web/index.html`:
 
 ```html
 <!doctype html>
@@ -841,7 +841,7 @@ Create `src/ollama_manual_pull/web/index.html`:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ollama Manual Pull</title>
+  <title>OllamaPull</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -849,7 +849,7 @@ Create `src/ollama_manual_pull/web/index.html`:
     <section class="workspace">
       <header class="topbar">
         <div>
-          <h1>Ollama Manual Pull</h1>
+          <h1>OllamaPull</h1>
           <p>One active download. Queue the rest.</p>
         </div>
         <div id="target" class="target"></div>
@@ -885,11 +885,11 @@ Create `src/ollama_manual_pull/web/index.html`:
 
 - [ ] **Step 2: Add responsive styling**
 
-Create `src/ollama_manual_pull/web/styles.css` with the Operator Panel layout. Use a two-column desktop layout, collapse to one column below `900px`, keep cards at `8px` radius or less, and use non-purple blue, green, amber, and neutral tones.
+Create `src/ollama_pull/web/styles.css` with the Operator Panel layout. Use a two-column desktop layout, collapse to one column below `900px`, keep cards at `8px` radius or less, and use non-purple blue, green, amber, and neutral tones.
 
 - [ ] **Step 3: Add client behavior**
 
-Create `src/ollama_manual_pull/web/app.js` with:
+Create `src/ollama_pull/web/app.js` with:
 
 ```javascript
 let state = { items: [] };
@@ -1027,14 +1027,14 @@ Expected: server tests still pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ollama_manual_pull/web/index.html src/ollama_manual_pull/web/styles.css src/ollama_manual_pull/web/app.js
+git add src/ollama_pull/web/index.html src/ollama_pull/web/styles.css src/ollama_pull/web/app.js
 git commit -m "Add operator panel web UI"
 ```
 
 ## Task 6: Wire CLI Launch And Full Verification
 
 **Files:**
-- Modify: `src/ollama_manual_pull/__main__.py`
+- Modify: `src/ollama_pull/__main__.py`
 - Modify: `README.md`
 
 - [ ] **Step 1: Add README usage**
@@ -1047,7 +1047,7 @@ Add a "Web UI" section to `README.md`:
 Launch the local browser UI:
 
 ```bash
-ollama-manual-pull-web
+ollamapull-web
 ```
 
 The web UI runs on `127.0.0.1`, queues one model download at a time, and preserves the same safety behavior as the CLI downloader. Search is best effort; direct model references such as `qwen3-coder:30b` always remain supported.
@@ -1060,8 +1060,8 @@ Run:
 
 ```bash
 python3 -m pip install -e .
-ollama-manual-pull --help
-ollama-manual-pull-web
+ollamapull --help
+ollamapull-web
 ```
 
 Expected: CLI help works, and the web command prints a local URL. Stop the web server with `Ctrl-C` after confirming the URL appears.
@@ -1072,7 +1072,7 @@ Run:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
-python3 -m py_compile src/ollama_manual_pull/*.py tests/*.py
+python3 -m py_compile src/ollama_pull/*.py tests/*.py
 ```
 
 Expected: all tests pass and compilation succeeds.
@@ -1082,7 +1082,7 @@ Expected: all tests pass and compilation succeeds.
 Run:
 
 ```bash
-ollama-manual-pull-web
+ollamapull-web
 ```
 
 Open the printed URL. Confirm:
@@ -1096,7 +1096,7 @@ Open the printed URL. Confirm:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add README.md src/ollama_manual_pull/__main__.py pyproject.toml
+git add README.md src/ollama_pull/__main__.py pyproject.toml
 git commit -m "Document and verify web UI launch"
 ```
 

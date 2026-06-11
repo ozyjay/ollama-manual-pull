@@ -6,9 +6,9 @@ import os
 from pathlib import Path
 from unittest import mock
 
-import ollama_manual_pull.queue as queue_module
-from ollama_manual_pull.core import DownloadStoppedAfterBlob
-from ollama_manual_pull.queue import DownloadQueue
+import ollama_pull.queue as queue_module
+from ollama_pull.core import DownloadStoppedAfterBlob
+from ollama_pull.queue import DownloadQueue
 
 
 class DownloadQueueTests(unittest.TestCase):

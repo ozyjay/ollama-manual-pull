@@ -16,8 +16,8 @@ def default_log_file() -> Path:
     if configured:
         return Path(configured).expanduser()
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Logs" / "Ollama Manual Pull" / "app.log"
-    return Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "ollama-manual-pull" / "app.log"
+        return Path.home() / "Library" / "Logs" / "OllamaPull" / "app.log"
+    return Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "ollamapull" / "app.log"
 
 
 def write_log(message: str, **fields: Any) -> None:

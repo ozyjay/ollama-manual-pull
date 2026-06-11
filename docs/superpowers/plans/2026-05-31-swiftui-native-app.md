@@ -4,7 +4,7 @@
 
 **Goal:** Maintain the completed SwiftUI native app migration while keeping the Python downloader engine and fixing duplicate queue entries, unreachable pause controls, refresh churn, and standard macOS commands.
 
-**Architecture:** Python remains the queue and downloader engine behind the local HTTP API. SwiftUI becomes a real multi-file macOS app under `macos/OllamaManualPull/`, with typed models, an API client, a process supervisor, an app store, fixed command bar layout, and menu commands.
+**Architecture:** Python remains the queue and downloader engine behind the local HTTP API. SwiftUI becomes a real multi-file macOS app under `macos/OllamaPull/`, with typed models, an API client, a process supervisor, an app store, fixed command bar layout, and menu commands.
 
 **Tech Stack:** Python 3.10+, `unittest`, Swift 5, SwiftUI, AppKit, Foundation, `swiftc`, local HTTP API.
 
@@ -12,22 +12,22 @@
 
 ## File Structure
 
-- Modify `src/ollama_manual_pull/queue.py`: add canonical model references and duplicate queue detection.
+- Modify `src/ollama_pull/queue.py`: add canonical model references and duplicate queue detection.
 - Modify `tests/test_queue.py`: add duplicate-prevention tests.
 - Modify `tests/test_server.py`: verify `/api/queue` exposes `deduplicated: true` when reusing an existing item.
-- Create `macos/OllamaManualPull/OllamaManualPullApp.swift`: SwiftUI `App` entry point and command menu definitions.
-- Create `macos/OllamaManualPull/PythonServerSupervisor.swift`: starts, observes, and terminates the bundled Python server process.
-- Create `macos/OllamaManualPull/Models.swift`: decodable API payloads and lightweight computed properties.
-- Create `macos/OllamaManualPull/APIClient.swift`: typed local API client.
-- Create `macos/OllamaManualPull/AppStore.swift`: observable state, refresh loop, selection rules, and queue actions.
-- Create `macos/OllamaManualPull/Formatters.swift`: date, byte, ETA, and status helpers.
-- Create `macos/OllamaManualPull/ContentView.swift`: top-level three-region app layout with fixed bottom command bar.
-- Create `macos/OllamaManualPull/SidebarView.swift`: section navigation.
-- Create `macos/OllamaManualPull/SearchView.swift`: search and direct add controls.
-- Create `macos/OllamaManualPull/InstalledModelsView.swift`: installed model list.
-- Create `macos/OllamaManualPull/QueueView.swift`: active download and stable queue list.
-- Create `macos/OllamaManualPull/QueueRowView.swift`: queue row presentation.
-- Create `macos/OllamaManualPull/InspectorView.swift`: selected item details.
+- Create `macos/OllamaPull/OllamaPullApp.swift`: SwiftUI `App` entry point and command menu definitions.
+- Create `macos/OllamaPull/PythonServerSupervisor.swift`: starts, observes, and terminates the bundled Python server process.
+- Create `macos/OllamaPull/Models.swift`: decodable API payloads and lightweight computed properties.
+- Create `macos/OllamaPull/APIClient.swift`: typed local API client.
+- Create `macos/OllamaPull/AppStore.swift`: observable state, refresh loop, selection rules, and queue actions.
+- Create `macos/OllamaPull/Formatters.swift`: date, byte, ETA, and status helpers.
+- Create `macos/OllamaPull/ContentView.swift`: top-level three-region app layout with fixed bottom command bar.
+- Create `macos/OllamaPull/SidebarView.swift`: section navigation.
+- Create `macos/OllamaPull/SearchView.swift`: search and direct add controls.
+- Create `macos/OllamaPull/InstalledModelsView.swift`: installed model list.
+- Create `macos/OllamaPull/QueueView.swift`: active download and stable queue list.
+- Create `macos/OllamaPull/QueueRowView.swift`: queue row presentation.
+- Create `macos/OllamaPull/InspectorView.swift`: selected item details.
 - Modify `scripts/build_macos_app.py`: copy and compile all Swift app sources, inject the Python executable into a generated Swift config file, and avoid the old generated resource-file app source.
 - Modify `tests/test_macos_app_builder.py`: assert the multi-file app source layout, fixed command bar, commands, and resource packaging.
 - Remove the legacy generated Swift template after the new app sources compile and tests no longer reference it.
@@ -35,7 +35,7 @@
 ## Task 1: Add Queue Canonicalization And Duplicate Prevention
 
 **Files:**
-- Modify: `src/ollama_manual_pull/queue.py`
+- Modify: `src/ollama_pull/queue.py`
 - Modify: `tests/test_queue.py`
 - Modify: `tests/test_server.py`
 
@@ -130,7 +130,7 @@ Expected: failures because queue items do not yet include `canonical_model` or `
 
 - [ ] **Step 4: Implement canonical references**
 
-In `src/ollama_manual_pull/queue.py`, add:
+In `src/ollama_pull/queue.py`, add:
 
 ```python
 def canonical_model_ref(model: str) -> str:
@@ -177,7 +177,7 @@ Expected: all queue and server tests pass.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/ollama_manual_pull/queue.py tests/test_queue.py tests/test_server.py
+git add src/ollama_pull/queue.py tests/test_queue.py tests/test_server.py
 git commit -m "Prevent duplicate queued downloads"
 ```
 
@@ -186,15 +186,15 @@ git commit -m "Prevent duplicate queued downloads"
 **Files:**
 - Modify: `scripts/build_macos_app.py`
 - Modify: `tests/test_macos_app_builder.py`
-- Create: `macos/OllamaManualPull/AppConfig.swift.in`
+- Create: `macos/OllamaPull/AppConfig.swift.in`
 
 - [ ] **Step 1: Write failing builder tests**
 
 In `tests/test_macos_app_builder.py`, replace assertions that expect the old generated resource-file app source with assertions for the source directory:
 
 ```python
-            source_dir = resources / "macos" / "OllamaManualPull"
-            self.assertTrue((source_dir / "OllamaManualPullApp.swift").is_file())
+            source_dir = resources / "macos" / "OllamaPull"
+            self.assertTrue((source_dir / "OllamaPullApp.swift").is_file())
             self.assertTrue((source_dir / "AppConfig.swift").is_file())
             self.assertTrue((source_dir / "AppStore.swift").is_file())
             self.assertTrue((source_dir / "ContentView.swift").is_file())
@@ -214,7 +214,7 @@ Replace the old `source_text` checks with:
             self.assertIn("NSHostingView", combined_source)
             self.assertIn("URLSession", combined_source)
             self.assertIn("Process", combined_source)
-            self.assertIn("ollama_manual_pull.server", combined_source)
+            self.assertIn("ollama_pull.server", combined_source)
             self.assertIn("create_server(('127.0.0.1', 0)", combined_source)
             self.assertNotIn("WKWebView", combined_source)
             self.assertNotIn("WebKit", combined_source)
@@ -230,18 +230,18 @@ Run:
 PYTHONPATH=src python3 -m unittest tests.test_macos_app_builder -v
 ```
 
-Expected: failure because `macos/OllamaManualPull` does not exist and the builder still writes the old generated resource-file app source.
+Expected: failure because `macos/OllamaPull` does not exist and the builder still writes the old generated resource-file app source.
 
 - [ ] **Step 3: Add Swift config template**
 
-Create `macos/OllamaManualPull/AppConfig.swift.in`:
+Create `macos/OllamaPull/AppConfig.swift.in`:
 
 ```swift
 import Foundation
 
 enum AppConfig {
     static let bundledPython = %%PYTHON_EXECUTABLE%%
-    static let serverCommand = "from ollama_manual_pull.server import create_server; from ollama_manual_pull.core import default_models_dir; httpd = create_server(('127.0.0.1', 0), models_dir=default_models_dir()); host, port = httpd.server_address; print(f'URL=http://{host}:{port}/', flush=True); httpd.serve_forever()"
+    static let serverCommand = "from ollama_pull.server import create_server; from ollama_pull.core import default_models_dir; httpd = create_server(('127.0.0.1', 0), models_dir=default_models_dir()); host, port = httpd.server_address; print(f'URL=http://{host}:{port}/', flush=True); httpd.serve_forever()"
 }
 ```
 
@@ -250,7 +250,7 @@ enum AppConfig {
 In `scripts/build_macos_app.py`, replace the legacy generated-template constant with:
 
 ```python
-NATIVE_APP_SOURCE_DIR = PROJECT_ROOT / "macos" / "OllamaManualPull"
+NATIVE_APP_SOURCE_DIR = PROJECT_ROOT / "macos" / "OllamaPull"
 ```
 
 - [ ] **Step 5: Copy Swift sources into resources**
@@ -258,7 +258,7 @@ NATIVE_APP_SOURCE_DIR = PROJECT_ROOT / "macos" / "OllamaManualPull"
 Replace the `native_source = ...` block in `build_app` with:
 
 ```python
-    native_source_dir = resources / "macos" / "OllamaManualPull"
+    native_source_dir = resources / "macos" / "OllamaPull"
     _write_native_sources(native_source_dir, python_executable)
     _compile_native_app(sorted(native_source_dir.glob("*.swift")), macos / APP_NAME)
 ```
@@ -279,7 +279,7 @@ Change `_compile_native_app` to:
 
 ```python
 def _compile_native_app(sources: list[Path], executable: Path) -> None:
-    with tempfile.TemporaryDirectory(prefix="ollama-manual-pull-swift-cache-") as module_cache:
+    with tempfile.TemporaryDirectory(prefix="ollamapull-swift-cache-") as module_cache:
         subprocess.run(
             [
                 "swiftc",
@@ -311,17 +311,17 @@ Expected: failure because required Swift source files are not created yet.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add scripts/build_macos_app.py tests/test_macos_app_builder.py macos/OllamaManualPull/AppConfig.swift.in
+git add scripts/build_macos_app.py tests/test_macos_app_builder.py macos/OllamaPull/AppConfig.swift.in
 git commit -m "Prepare macOS builder for Swift source tree"
 ```
 
 ## Task 3: Add Typed Swift Models, API Client, And Server Supervisor
 
 **Files:**
-- Create: `macos/OllamaManualPull/Models.swift`
-- Create: `macos/OllamaManualPull/APIClient.swift`
-- Create: `macos/OllamaManualPull/PythonServerSupervisor.swift`
-- Create: `macos/OllamaManualPull/Formatters.swift`
+- Create: `macos/OllamaPull/Models.swift`
+- Create: `macos/OllamaPull/APIClient.swift`
+- Create: `macos/OllamaPull/PythonServerSupervisor.swift`
+- Create: `macos/OllamaPull/Formatters.swift`
 
 - [ ] **Step 1: Create `Models.swift`**
 
@@ -699,7 +699,7 @@ enum AppFormatters {
 Run:
 
 ```bash
-python3 scripts/build_macos_app.py --output-dir /private/tmp/ollama-manual-pull-plan-build
+python3 scripts/build_macos_app.py --output-dir /private/tmp/ollamapull-plan-build
 ```
 
 Expected: failure because app entry point and views are not created yet.
@@ -707,14 +707,14 @@ Expected: failure because app entry point and views are not created yet.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add macos/OllamaManualPull/Models.swift macos/OllamaManualPull/APIClient.swift macos/OllamaManualPull/PythonServerSupervisor.swift macos/OllamaManualPull/Formatters.swift
+git add macos/OllamaPull/Models.swift macos/OllamaPull/APIClient.swift macos/OllamaPull/PythonServerSupervisor.swift macos/OllamaPull/Formatters.swift
 git commit -m "Add native app model and API layers"
 ```
 
 ## Task 4: Add AppStore With Stable Refresh And Actions
 
 **Files:**
-- Create: `macos/OllamaManualPull/AppStore.swift`
+- Create: `macos/OllamaPull/AppStore.swift`
 
 - [ ] **Step 1: Create `AppStore.swift`**
 
@@ -935,7 +935,7 @@ enum AppSection: String, CaseIterable, Identifiable {
 Run:
 
 ```bash
-python3 scripts/build_macos_app.py --output-dir /private/tmp/ollama-manual-pull-plan-build
+python3 scripts/build_macos_app.py --output-dir /private/tmp/ollamapull-plan-build
 ```
 
 Expected: failure because app entry point and views are still missing.
@@ -943,23 +943,23 @@ Expected: failure because app entry point and views are still missing.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add macos/OllamaManualPull/AppStore.swift
+git add macos/OllamaPull/AppStore.swift
 git commit -m "Add native app state store"
 ```
 
 ## Task 5: Add SwiftUI App Entry Point, Commands, And Views
 
 **Files:**
-- Create: `macos/OllamaManualPull/OllamaManualPullApp.swift`
-- Create: `macos/OllamaManualPull/ContentView.swift`
-- Create: `macos/OllamaManualPull/SidebarView.swift`
-- Create: `macos/OllamaManualPull/SearchView.swift`
-- Create: `macos/OllamaManualPull/InstalledModelsView.swift`
-- Create: `macos/OllamaManualPull/QueueView.swift`
-- Create: `macos/OllamaManualPull/QueueRowView.swift`
-- Create: `macos/OllamaManualPull/InspectorView.swift`
+- Create: `macos/OllamaPull/OllamaPullApp.swift`
+- Create: `macos/OllamaPull/ContentView.swift`
+- Create: `macos/OllamaPull/SidebarView.swift`
+- Create: `macos/OllamaPull/SearchView.swift`
+- Create: `macos/OllamaPull/InstalledModelsView.swift`
+- Create: `macos/OllamaPull/QueueView.swift`
+- Create: `macos/OllamaPull/QueueRowView.swift`
+- Create: `macos/OllamaPull/InspectorView.swift`
 
-- [ ] **Step 1: Create `OllamaManualPullApp.swift`**
+- [ ] **Step 1: Create `OllamaPullApp.swift`**
 
 Create:
 
@@ -968,12 +968,12 @@ import AppKit
 import SwiftUI
 
 @main
-struct OllamaManualPullApp: App {
+struct OllamaPullApp: App {
     @StateObject private var store = AppStore()
     @StateObject private var supervisor = PythonServerSupervisor()
 
     var body: some Scene {
-        WindowGroup("Ollama Manual Pull") {
+        WindowGroup("OllamaPull") {
             ContentView()
                 .environmentObject(store)
                 .frame(minWidth: 1040, minHeight: 700)
@@ -990,7 +990,7 @@ struct OllamaManualPullApp: App {
         }
         .commands {
             CommandGroup(replacing: .appTermination) {
-                Button("Quit Ollama Manual Pull") {
+                Button("Quit OllamaPull") {
                     NSApplication.shared.terminate(nil)
                 }
                 .keyboardShortcut("q", modifiers: .command)
@@ -1086,7 +1086,7 @@ struct HeaderView: View {
     var body: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Ollama Manual Pull")
+                Text("OllamaPull")
                     .font(.title2)
                     .fontWeight(.semibold)
                 Text(store.serverReady ? "Native macOS queue window" : "Starting local downloader server...")
@@ -1494,7 +1494,7 @@ struct InspectorView: View {
 Run:
 
 ```bash
-python3 scripts/build_macos_app.py --output-dir /private/tmp/ollama-manual-pull-plan-build
+python3 scripts/build_macos_app.py --output-dir /private/tmp/ollamapull-plan-build
 PYTHONPATH=src python3 -m unittest tests.test_macos_app_builder -v
 ```
 
@@ -1503,7 +1503,7 @@ Expected: both commands exit with status 0; app builds and builder test passes.
 - [ ] **Step 10: Commit**
 
 ```bash
-git add macos/OllamaManualPull
+git add macos/OllamaPull
 git commit -m "Add multi-file SwiftUI macOS app"
 ```
 
@@ -1534,8 +1534,8 @@ Run:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
-python3 -m py_compile src/ollama_manual_pull/*.py tests/*.py scripts/build_macos_app.py
-python3 scripts/build_macos_app.py --output-dir /private/tmp/ollama-manual-pull-plan-build
+python3 -m py_compile src/ollama_pull/*.py tests/*.py scripts/build_macos_app.py
+python3 scripts/build_macos_app.py --output-dir /private/tmp/ollamapull-plan-build
 ```
 
 Expected: all tests pass, Python files compile, and the macOS app builds.
@@ -1561,14 +1561,14 @@ Run:
 python3 scripts/build_macos_app.py --install
 ```
 
-Expected: `/Applications/Ollama Manual Pull.app` is replaced with the new build.
+Expected: `/Applications/OllamaPull.app` is replaced with the new build.
 
 - [ ] **Step 2: Launch the app**
 
 Run:
 
 ```bash
-open "/Applications/Ollama Manual Pull.app"
+open "/Applications/OllamaPull.app"
 ```
 
 Expected: native app opens, starts the local Python server, and shows the fixed bottom command bar.

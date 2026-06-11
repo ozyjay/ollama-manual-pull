@@ -30,16 +30,16 @@ class MacOSAppBuilderTests(unittest.TestCase):
                 python_executable=Path("/Users/example/.pyenv/versions/3.12.13/bin/python3"),
             )
 
-            executable = app_path / "Contents" / "MacOS" / "Ollama Manual Pull"
+            executable = app_path / "Contents" / "MacOS" / "OllamaPull"
             info_plist = app_path / "Contents" / "Info.plist"
             resources = app_path / "Contents" / "Resources"
 
-            self.assertEqual(app_path, output_dir / "Ollama Manual Pull.app")
+            self.assertEqual(app_path, output_dir / "OllamaPull.app")
             self.assertTrue(executable.is_file())
             self.assertTrue(executable.stat().st_mode & 0o111)
             self.assertEqual(executable.read_bytes()[:4], b"\xcf\xfa\xed\xfe")
-            source_dir = resources / "macos" / "OllamaManualPull"
-            self.assertTrue((source_dir / "OllamaManualPullApp.swift").is_file())
+            source_dir = resources / "macos" / "OllamaPull"
+            self.assertTrue((source_dir / "OllamaPullApp.swift").is_file())
             self.assertTrue((source_dir / "AppConfig.swift").is_file())
             self.assertTrue((source_dir / "AppStore.swift").is_file())
             self.assertTrue((source_dir / "ContentView.swift").is_file())
@@ -50,14 +50,14 @@ class MacOSAppBuilderTests(unittest.TestCase):
             self.assertIn("ic11", icon_chunks)
             self.assertIn("ic12", icon_chunks)
             self.assertTrue((resources / "AppIcon.svg").is_file())
-            self.assertTrue((resources / "src" / "ollama_manual_pull" / "server.py").is_file())
-            self.assertTrue((resources / "src" / "ollama_manual_pull" / "web" / "app.js").is_file())
+            self.assertTrue((resources / "src" / "ollama_pull" / "server.py").is_file())
+            self.assertTrue((resources / "src" / "ollama_pull" / "web" / "app.js").is_file())
             self.assertTrue((resources / "README.md").is_file())
             self.assertTrue((resources / "LICENSE").is_file())
 
             plist = plistlib.loads(info_plist.read_bytes())
-            self.assertEqual(plist["CFBundleName"], "Ollama Manual Pull")
-            self.assertEqual(plist["CFBundleExecutable"], "Ollama Manual Pull")
+            self.assertEqual(plist["CFBundleName"], "OllamaPull")
+            self.assertEqual(plist["CFBundleExecutable"], "OllamaPull")
             self.assertEqual(plist["CFBundleIconFile"], "AppIcon")
             self.assertEqual(plist["CFBundleIconName"], "AppIcon")
 
@@ -78,7 +78,7 @@ class MacOSAppBuilderTests(unittest.TestCase):
             self.assertIn("NSHostingView", combined_source)
             self.assertIn("URLSession", combined_source)
             self.assertIn("Process", combined_source)
-            self.assertIn("ollama_manual_pull.server", combined_source)
+            self.assertIn("ollama_pull.server", combined_source)
             self.assertIn("create_server(('127.0.0.1', 0)", combined_source)
             self.assertIn("func refreshState(showIndicator: Bool = true) async", combined_source)
             self.assertIn("func stopAfterCurrentBlob() async", combined_source)
@@ -145,7 +145,7 @@ class MacOSAppBuilderTests(unittest.TestCase):
     def test_build_app_compiles_nested_swift_sources(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            source_root = root / "OllamaManualPull"
+            source_root = root / "OllamaPull"
             output_dir = root / "dist"
             shutil.copytree(build_macos_app.NATIVE_APP_SOURCE_DIR, source_root)
             nested_dir = source_root / "Support"
@@ -171,7 +171,7 @@ class MacOSAppBuilderTests(unittest.TestCase):
                 / "Contents"
                 / "Resources"
                 / "macos"
-                / "OllamaManualPull"
+                / "OllamaPull"
                 / "Support"
                 / "NestedCompileCheck.swift"
             )
@@ -195,16 +195,16 @@ class MacOSAppBuilderTests(unittest.TestCase):
                 python_executable=Path("/Users/example/.pyenv/versions/3.12.13/bin/python3"),
             )
             applications_dir = root / "Applications"
-            stale_app = applications_dir / "Ollama Manual Pull.app"
+            stale_app = applications_dir / "OllamaPull.app"
             stale_app.mkdir(parents=True)
             (stale_app / "stale.txt").write_text("old")
 
             installed = build_macos_app.install_app(app_path, applications_dir=applications_dir)
 
-            self.assertEqual(installed, applications_dir / "Ollama Manual Pull.app")
+            self.assertEqual(installed, applications_dir / "OllamaPull.app")
             self.assertTrue((installed / "Contents" / "Info.plist").is_file())
             self.assertTrue((installed / "Contents" / "Resources" / "AppIcon.icns").is_file())
-            self.assertTrue((installed / "Contents" / "MacOS" / "Ollama Manual Pull").is_file())
+            self.assertTrue((installed / "Contents" / "MacOS" / "OllamaPull").is_file())
             self.assertFalse((installed / "stale.txt").exists())
 
     def test_install_app_touches_copied_bundle_to_refresh_finder_metadata(self):
@@ -226,8 +226,8 @@ class MacOSAppBuilderTests(unittest.TestCase):
             self.assertGreaterEqual(installed.stat().st_mtime, before_install)
 
     def test_main_prompts_for_admin_install_when_explicit_applications_copy_is_denied(self):
-        app_path = Path("/tmp/Ollama Manual Pull.app")
-        installed_path = Path("/Applications/Ollama Manual Pull.app")
+        app_path = Path("/tmp/OllamaPull.app")
+        installed_path = Path("/Applications/OllamaPull.app")
 
         with mock.patch.object(build_macos_app, "build_app", return_value=app_path), \
             mock.patch.object(build_macos_app, "install_app", side_effect=PermissionError("denied")), \
@@ -245,12 +245,12 @@ class MacOSAppBuilderTests(unittest.TestCase):
         )
 
     def test_main_installs_to_user_applications_by_default(self):
-        app_path = Path("/tmp/Ollama Manual Pull.app")
+        app_path = Path("/tmp/OllamaPull.app")
 
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
             expected_applications_dir = home / "Applications"
-            installed_path = expected_applications_dir / "Ollama Manual Pull.app"
+            installed_path = expected_applications_dir / "OllamaPull.app"
 
             with mock.patch.object(Path, "home", return_value=home), \
                 mock.patch.object(build_macos_app, "build_app", return_value=app_path), \
